@@ -62,20 +62,28 @@ tvheadend.VLC = function(url) {
   
   selectChannel.on('select', function(c, r) {
       var url = 'stream/channelid/' + r.data.chid;
+      var playlist = 'playlist/channelid/' + r.data.chid;
+
       var chName = r.data.name;
       if (!chName.length) {
-	  chName = 'the channel';
-      }
-
-      if(!vlc.playlist || vlc.playlist == 'undefined') {
-	  var chUrl = '<a href="' + url + '">' + chName + '</a>';
-	  missingPlugin.innerHTML  = '<p>You are missing a plugin for your browser.</p>';
-	  missingPlugin.innerHTML += '<p>You can still watch ' + chUrl + ' using an external player.</p>';
-	  missingPlugin.style.display = 'block';
-	  return;
+	  chName = 'the stream';
       }
 
       vlc.style.display = 'block';
+
+      if(!vlc.playlist || vlc.playlist == 'undefined') {
+	  var innerHTML = '';
+	  innerHTML += '<p>You are missing a plugin for your browser.'
+	  innerHTML += 'You can still watch ' + chName;
+	  innerHTML += ' using an external player.</p>';
+	  innerHTML += '<p><a href="' + playlist + '">M3U Playlist</a></p>';
+	  innerHTML += '<p><a href="' + url + '">Direct URL</a></p>';
+
+	  missingPlugin.innerHTML = innerHTML;
+	  vlc.style.display = 'none';
+	  missingPlugin.style.display = 'block';
+	  return;
+      }
 
       if(vlc.playlist && vlc.playlist.isPlaying) {
         vlc.playlist.stop();
@@ -175,6 +183,15 @@ tvheadend.VLC = function(url) {
     win.getTopToolbar().add(new Ext.Toolbar.Spacer());
     win.getTopToolbar().add(new Ext.Toolbar.Spacer());
     win.getTopToolbar().add(sliderLabel);
+
+    if(url && (!vlc.playlist || vlc.playlist == 'undefined')) {
+      vlc.style.display = 'none';
+
+      var chUrl = '<a href="' + url + '">the stream</a>';
+      missingPlugin.innerHTML  = '<p>You are missing a plugin for your browser.</p>';
+      missingPlugin.innerHTML += '<p>You can still watch ' + chUrl + ' using an external player.</p>';
+      missingPlugin.style.display = 'block';
+    }
   });
 
   win.show();
