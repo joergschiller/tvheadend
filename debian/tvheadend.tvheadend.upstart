@@ -1,0 +1,14 @@
+# tvheadend - Tvheadend
+#
+# TV backend for use with Showtime, XBMC and various other clients.
+# Uses ExtJS 'http://www.extjs.org/'
+
+description	"Tvheadend"
+
+start on (runlevel [2345] and started udev and local-filesystems and remote-filesystems)
+stop on runlevel [016]
+
+expect fork
+respawn
+
+exec /usr/bin/tvheadend -f -u hts -g video
