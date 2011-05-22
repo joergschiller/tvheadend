@@ -239,6 +239,8 @@ h264_decode_seq_parameter_set(elementary_stream_t *st, bitstream_t *bs)
   level_idc= read_bits(bs, 8);
   sps_id= read_golomb_ue(bs);
 
+  if(sps_id > 255)
+    return -1;
 
   i = 0;
   while(h264_lev2cpbsize[i][0] != -1) {
@@ -337,7 +339,12 @@ h264_decode_pic_parameter_set(elementary_stream_t *st, bitstream_t *bs)
     p = st->es_priv = calloc(1, sizeof(h264_private_t));
   
   pps_id = read_golomb_ue(bs);
+  if(pps_id > 255)
+    return 0;
   sps_id = read_golomb_ue(bs);
+  if(sps_id > 255)
+    return -1;
+
   p->pps[pps_id].sps = sps_id;
   return 0;
 }
@@ -348,7 +355,7 @@ h264_decode_slice_header(elementary_stream_t *st, bitstream_t *bs, int *pkttype,
 			 int *duration, int *isfield)
 {
   h264_private_t *p;
-  int slice_type, pps_id, sps_id, fnum;
+  int slice_type, pps_id, sps_id;
 
   if((p = st->es_priv) == NULL)
     return -1;
@@ -374,11 +381,14 @@ h264_decode_slice_header(elementary_stream_t *st, bitstream_t *bs, int *pkttype,
   }
 
   pps_id = read_golomb_ue(bs);
+  if(pps_id > 255)
+    return -1;
+
   sps_id = p->pps[pps_id].sps;
   if(p->sps[sps_id].max_frame_num_bits == 0)
     return -1;
 
-  fnum = read_bits(bs, p->sps[sps_id].max_frame_num_bits);
+  skip_bits(bs, p->sps[sps_id].max_frame_num_bits);
 
   int field = 0;
   int timebase = 180000;
