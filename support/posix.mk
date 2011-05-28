@@ -1,24 +1,16 @@
 
-INSTBIN=  ${DESTDIR}${INSTALLPREFIX}/bin
-INSTMAN=  ${DESTDIR}${INSTALLPREFIX}/share/man1
-INSTDBG=  ${DESTDIR}/usr/lib/debug/${INSTALLPREFIX}/bin
+prefix ?= $(INSTALLPREFIX)
+INSTBIN= $(prefix)/bin
+INSTMAN= $(prefix)/share/man1
 MAN=man/tvheadend.1
 
 install: ${PROG} ${MAN}
-	mkdir -p ${INSTBIN}
-	mkdir -p ${INSTDBG}
-	install -T ${PROG} ${INSTBIN}/tvheadend
+	mkdir -p ${DESTDIR}$(INSTBIN)
+	install -s ${PROG} ${DESTDIR}$(INSTBIN)
 
-	objcopy --only-keep-debug ${INSTBIN}/tvheadend ${INSTDBG}/tvheadend.debug
-	strip -g ${INSTBIN}/tvheadend
-
-	objcopy --add-gnu-debuglink=${INSTDBG}/tvheadend.debug ${INSTBIN}/tvheadend
-
-
-	mkdir -p ${INSTMAN}
-	install ${MAN} ${INSTMAN}
+	mkdir -p ${DESTDIR}$(INSTMAN)
+	install ${MAN} ${DESTDIR}$(INSTMAN)
 
 uninstall:
-	rm -f ${INSTBIN}/tvheadend
-	rm -f ${INSTDBG}/tvheadend.debug
-	rm -f ${INSTMAN}/tvheadend.1
+	rm -f ${DESTDIR}$(INSTBIN)/${PROG}
+	rm -f ${DESTDIR}$(INSTMAN)/${MAN}
