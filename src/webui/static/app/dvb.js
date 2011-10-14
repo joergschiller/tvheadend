@@ -338,6 +338,12 @@ tvheadend.dvb_services = function(adapterId) {
        width: 45
     });
 
+	var eitColumn = new Ext.grid.CheckColumn({
+		header: "EIT",
+		dataIndex: 'dvb_eit_enable',
+		width: 45
+	});
+
     var actions = new Ext.ux.grid.RowActions({
 	header:'',
 	dataIndex: 'actions',
@@ -395,6 +401,46 @@ tvheadend.dvb_services = function(adapterId) {
 	    })
 	},
 	{
+		header: "DVB default charset",
+		dataIndex: 'dvb_default_charset',
+		width: 200,
+		renderer: function(value, metadata, record, row, col, store) {
+			return value ? value :
+				'<span class="tvh-grid-unset">ISO6937</span>';
+		},
+		editor: new fm.ComboBox({
+			mode: 'local',
+			store: new Ext.data.SimpleStore({
+				fields: ['key','value'],
+				data: [
+					['ISO6937','default'],
+					['ISO6937','ISO6937'],
+					['ISO8859-1','ISO8859-1'],
+					['ISO8859-2','ISO8859-2'],
+					['ISO8859-3','ISO8859-3'],
+					['ISO8859-4','ISO8859-4'],
+					['ISO8859-5','ISO8859-5'],
+					['ISO8859-6','ISO8859-6'],
+					['ISO8859-7','ISO8859-7'],
+					['ISO8859-8','ISO8859-8'],
+					['ISO8859-9','ISO8859-9'],
+					['ISO8859-10','ISO8859-10'],
+					['ISO8859-11','ISO8859-11'],
+					['ISO8859-12','ISO8859-12'],
+					['ISO8859-13','ISO8859-13'],
+					['ISO8859-14','ISO8859-14'],
+					['ISO8859-15','ISO8859-15']
+       				]
+			}),
+			typeAhead: true,
+			lazyRender: true,
+			triggerAction: 'all',
+			displayField:'value',
+			valueField:'key'
+		})
+	},
+	eitColumn,
+	{
 	    header: "Type",
 	    dataIndex: 'type',
 	    width: 50
@@ -439,8 +485,8 @@ tvheadend.dvb_services = function(adapterId) {
     var store = new Ext.data.JsonStore({
 	root: 'entries',
 	fields: Ext.data.Record.create([
-	    'id', 'enabled', 'type', 'sid', 'pmt', 'pcr', 
-	    'svcname', 'network', 'provider', 'mux', 'channelname'
+	    'id', 'enabled', 'type', 'sid', 'pmt', 'pcr', 'svcname', 'network',
+	    'provider', 'mux', 'channelname', 'dvb_default_charset', 'dvb_eit_enable'
 	]),
 	url: "dvb/services/" + adapterId,
 	autoLoad: true,
@@ -526,7 +572,7 @@ tvheadend.dvb_services = function(adapterId) {
     var grid = new Ext.grid.EditorGridPanel({
 	stripeRows: true,
 	title: 'Services',
-	plugins: [enabledColumn, actions],
+	plugins: [enabledColumn, eitColumn, actions],
 	store: store,
 	clicksToEdit: 2,
 	cm: cm,

@@ -47,7 +47,7 @@ static iconv_t
 dvb_iconv_open(const char *srcencoding)
 {
   iconv_t ic;
-  ic = iconv_open("UTF8", srcencoding);
+  ic = iconv_open("UTF-8", srcencoding);
   return ic;
 }
 
@@ -62,8 +62,11 @@ dvb_conversion_init(void)
     convert_iso_8859[i] = dvb_iconv_open(buf);
   }
 
-  convert_utf8   = dvb_iconv_open("UTF8");
+  convert_utf8   = dvb_iconv_open("UTF-8");
   convert_latin1 = dvb_iconv_open("ISO6937");
+  if(convert_latin1 == (iconv_t)(-1)) {
+    convert_latin1 = dvb_iconv_open("ISO_8859-1");
+  }
 }
 
 
@@ -74,7 +77,7 @@ dvb_conversion_init(void)
  */
 
 int
-dvb_get_string(char *dst, size_t dstlen, const uint8_t *src, size_t srclen)
+dvb_get_string(char *dst, size_t dstlen, const uint8_t *src, size_t srclen, char *dvb_default_charset)
 {
   iconv_t ic;
   int len;
@@ -121,7 +124,15 @@ dvb_get_string(char *dst, size_t dstlen, const uint8_t *src, size_t srclen)
     return -1;
 
   default:
-    ic = convert_latin1;
+    if (dvb_default_charset != NULL && sscanf(dvb_default_charset, "ISO8859-%d", &i) > 0) {
+      if (i > 0 && i < 16) {
+        ic = convert_iso_8859[i];
+      } else {
+        ic = convert_latin1;
+      }
+    } else {
+      ic = convert_latin1;
+    }
     break;
   }
 
@@ -175,14 +186,14 @@ dvb_get_string(char *dst, size_t dstlen, const uint8_t *src, size_t srclen)
 
 int
 dvb_get_string_with_len(char *dst, size_t dstlen, 
-			const uint8_t *buf, size_t buflen)
+			const uint8_t *buf, size_t buflen, char *dvb_default_charset)
 {
   int l = buf[0];
 
   if(l + 1 > buflen)
     return -1;
 
-  if(dvb_get_string(dst, dstlen, buf + 1, l))
+  if(dvb_get_string(dst, dstlen, buf + 1, l, dvb_default_charset))
     return -1;
 
   return l + 1;

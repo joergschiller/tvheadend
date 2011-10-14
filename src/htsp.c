@@ -609,15 +609,15 @@ htsp_method_updateDvrEntry(htsp_connection_t *htsp, htsmsg_t *in)
 }
 
 /**
- * delete a Dvrentry
+ * cancel a Dvrentry
  */
-static htsmsg_t * 
-htsp_method_deleteDvrEntry(htsp_connection_t *htsp, htsmsg_t *in)
+static htsmsg_t *
+htsp_method_cancelDvrEntry(htsp_connection_t *htsp, htsmsg_t *in)
 {
   htsmsg_t *out;
   uint32_t dvrEntryId;
   dvr_entry_t *de;
-    
+
   if(htsmsg_get_u32(in, "id", &dvrEntryId))
     return htsp_error("Missing argument 'id'");
 
@@ -629,7 +629,32 @@ htsp_method_deleteDvrEntry(htsp_connection_t *htsp, htsmsg_t *in)
   //create response
   out = htsmsg_create_map();
   htsmsg_add_u32(out, "success", 1);
-  
+
+  return out;
+}
+
+/**
+ * delete a Dvrentry
+ */
+static htsmsg_t *
+htsp_method_deleteDvrEntry(htsp_connection_t *htsp, htsmsg_t *in)
+{
+  htsmsg_t *out;
+  uint32_t dvrEntryId;
+  dvr_entry_t *de;
+
+  if(htsmsg_get_u32(in, "id", &dvrEntryId))
+    return htsp_error("Missing argument 'id'");
+
+  if( (de = dvr_entry_find_by_id(dvrEntryId)) == NULL)
+    return htsp_error("id not found");
+
+  dvr_entry_cancel_delete(de);
+
+  //create response
+  out = htsmsg_create_map();
+  htsmsg_add_u32(out, "success", 1);
+
   return out;
 }
 
@@ -687,9 +712,11 @@ htsp_build_event(event_t *e)
 {
   htsmsg_t *out;
   event_t *n;
+  dvr_entry_t *de;
 
   out = htsmsg_create_map();
 
+  htsmsg_add_u32(out, "eventId", e->e_id);
   htsmsg_add_u32(out, "channelId", e->e_channel->ch_id);
   htsmsg_add_u32(out, "start", e->e_start);
   htsmsg_add_u32(out, "stop", e->e_stop);
@@ -706,6 +733,10 @@ htsp_build_event(event_t *e)
 
   if(e->e_content_type)
     htsmsg_add_u32(out, "contentType", e->e_content_type);
+
+  if((de = dvr_entry_find_by_event(e)) != NULL) {
+    htsmsg_add_u32(out, "dvrId", de->de_id);
+  }
 
   n = RB_NEXT(e, e_channel_link);
   if(n != NULL)
@@ -1000,6 +1031,7 @@ struct {
   { "subscriptionChangeWeight", htsp_method_change_weight, ACCESS_STREAMING},
   { "addDvrEntry", htsp_method_addDvrEntry, ACCESS_RECORDER},
   { "updateDvrEntry", htsp_method_updateDvrEntry, ACCESS_RECORDER},
+  { "cancelDvrEntry", htsp_method_cancelDvrEntry, ACCESS_RECORDER},
   { "deleteDvrEntry", htsp_method_deleteDvrEntry, ACCESS_RECORDER},
   { "epgQuery", htsp_method_epgQuery, ACCESS_STREAMING},
 
@@ -1222,8 +1254,13 @@ htsp_write_scheduler(void *aux)
    
     /* ignore return value */ 
     r = write(htsp->htsp_fd, dptr, dlen);
+    if(r != dlen)
+      tvhlog(LOG_INFO, "htsp", "%s: Write error -- %s", 
+	     htsp->htsp_logname, strerror(errno));
     free(dptr);
     pthread_mutex_lock(&htsp->htsp_out_mutex);
+    if(r != dlen) 
+      break;
   }
 
   pthread_mutex_unlock(&htsp->htsp_out_mutex);
@@ -1331,7 +1368,7 @@ htsp_async_send(htsmsg_t *m)
  * global_lock is held
  */
 void
-htsp_channgel_update_current(channel_t *ch)
+htsp_channel_update_current(channel_t *ch)
 {
   htsmsg_t *m;
   time_t now;
@@ -1600,6 +1637,18 @@ htsp_subscription_start(htsp_subscription_t *hs, const streaming_start_t *ss)
 	htsmsg_add_u32(c, "width", ssc->ssc_width);
       if(ssc->ssc_height)
 	htsmsg_add_u32(c, "height", ssc->ssc_height);
+      if (ssc->ssc_aspect_num)
+        htsmsg_add_u32(c, "aspect_num", ssc->ssc_aspect_num);
+      if (ssc->ssc_aspect_den)
+        htsmsg_add_u32(c, "aspect_den", ssc->ssc_aspect_den);
+    }
+
+    if (SCT_ISAUDIO(ssc->ssc_type))
+    {
+      if (ssc->ssc_channels)
+        htsmsg_add_u32(c, "channels", ssc->ssc_channels);
+      if (ssc->ssc_sri)
+        htsmsg_add_u32(c, "rate", ssc->ssc_sri);
     }
 
     htsmsg_add_msg(streams, NULL, c);

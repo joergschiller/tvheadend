@@ -323,17 +323,38 @@ dvr_entry_create(const char *config_name,
 /**
  *
  */
+static const char *
+longest_string(const char *a, const char *b)
+{
+  if(b == NULL)
+    return a;
+  if(a == NULL)
+    return b;
+  return strlen(a) > strlen(b) ? a : b;
+}
+
+
+/**
+ *
+ */
 dvr_entry_t *
 dvr_entry_create_by_event(const char *config_name,
                           event_t *e, const char *creator, 
 			  dvr_autorec_entry_t *dae, dvr_prio_t pri)
 {
+  const char *desc = NULL;
   if(e->e_channel == NULL || e->e_title == NULL)
     return NULL;
 
+  // Try to find best description
+
+  desc = longest_string(e->e_desc, e->e_ext_desc);
+  desc = longest_string(desc, e->e_ext_item);
+  desc = longest_string(desc, e->e_ext_text);
+
   return dvr_entry_create(config_name,
                           e->e_channel, e->e_start, e->e_stop, 
-			  e->e_title, e->e_desc, creator, dae, &e->e_episode,
+			  e->e_title, desc, creator, dae, &e->e_episode,
 			  e->e_content_type, pri);
 }
 
@@ -604,10 +625,29 @@ dvr_entry_update(dvr_entry_t *de, const char* de_title, int de_start, int de_sto
   htsp_dvr_entry_update(de);
   dvr_entry_notify(de);
 
-
   tvhlog(LOG_INFO, "dvr", "\"%s\" on \"%s\": Updated Timer", de->de_title, de->de_channel->ch_name);
 
   return de;
+}
+
+/**
+ * Used to notify the DVR that an event has been replaced in the EPG
+ */
+void 
+dvr_event_replaced(event_t *e, event_t *new_e)
+{
+  dvr_entry_t *de, *ude;
+
+  de = dvr_entry_find_by_event(e);
+  if (de != NULL) {
+    ude = dvr_entry_find_by_event_fuzzy(new_e);
+    if (ude == NULL && de->de_sched_state == DVR_SCHEDULED)
+      dvr_entry_cancel(de);
+    else if(new_e->e_title != NULL)
+      dvr_entry_update(de, new_e->e_title, new_e->e_start, new_e->e_stop);
+  }
+      
+    
 }
 
 /**
@@ -696,6 +736,20 @@ dvr_entry_find_by_event(event_t *e)
   LIST_FOREACH(de, &e->e_channel->ch_dvrs, de_channel_link)
     if(de->de_start == e->e_start &&
        de->de_stop  == e->e_stop)
+      return de;
+  return NULL;
+}
+
+/**
+ * Find dvr entry using 'fuzzy' search
+ */
+dvr_entry_t *
+dvr_entry_find_by_event_fuzzy(event_t *e)
+{
+  dvr_entry_t *de;
+
+  LIST_FOREACH(de, &e->e_channel->ch_dvrs, de_channel_link)
+    if (abs(de->de_start - e->e_start) < 600 && abs(de->de_stop - e->e_stop) < 600)
       return de;
   return NULL;
 }
@@ -1192,7 +1246,61 @@ dvr_entry_delete(dvr_entry_t *de)
     if(unlink(de->de_filename) && errno != ENOENT)
       tvhlog(LOG_WARNING, "dvr", "Unable to remove file '%s' from disk -- %s",
 	     de->de_filename, strerror(errno));
+
+    /* Also delete directories, if they were created for the recording and if they are empty */
+
+    dvr_config_t *cfg = dvr_config_find_by_name_default(de->de_config_name);
+    char path[500];
+
+    snprintf(path, sizeof(path), "%s", cfg->dvr_storage);
+
+    if(cfg->dvr_flags & DVR_DIR_PER_TITLE || cfg->dvr_flags & DVR_DIR_PER_CHANNEL || cfg->dvr_flags & DVR_DIR_PER_DAY) {
+      char *p;
+      int l;
+
+      l = strlen(de->de_filename);
+      p = alloca(l + 1);
+      memcpy(p, de->de_filename, l);
+      p[l--] = 0;
+
+      for(; l >= 0; l--) {
+        if(p[l] == '/') {
+          p[l] = 0;
+          if(strncmp(p, cfg->dvr_storage, strlen(p)) == 0)
+            break;
+          if(rmdir(p) == -1)
+            break;
+        }
+      }
+    }
+
   }
   dvr_entry_remove(de);
 }
 
+/**
+ *
+ */
+void
+dvr_entry_cancel_delete(dvr_entry_t *de)
+{
+  switch(de->de_sched_state) {
+  case DVR_SCHEDULED:
+    dvr_entry_remove(de);
+    break;
+
+  case DVR_RECORDING:
+    de->de_dont_reschedule = 1;
+    dvr_stop_recording(de, SM_CODE_ABORTED);
+  case DVR_COMPLETED:
+    dvr_entry_delete(de);
+    break;
+
+  case DVR_MISSED_TIME:
+    dvr_entry_remove(de);
+    break;
+
+  default:
+    abort();
+  }
+}

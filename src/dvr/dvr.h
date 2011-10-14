@@ -254,9 +254,13 @@ void dvr_rec_subscribe(dvr_entry_t *de);
 
 void dvr_rec_unsubscribe(dvr_entry_t *de, int stopcode);
 
+void dvr_event_replaced(event_t *e, event_t *new_e);
+
 dvr_entry_t *dvr_entry_find_by_id(int id);
 
 dvr_entry_t *dvr_entry_find_by_event(event_t *e);
+
+dvr_entry_t *dvr_entry_find_by_event_fuzzy(event_t *e);
 
 off_t dvr_get_filesize(dvr_entry_t *de);
 
@@ -277,6 +281,8 @@ void dvr_extra_time_pre_set(dvr_config_t *cfg, int d);
 void dvr_extra_time_post_set(dvr_config_t *cfg, int d);
 
 void dvr_entry_delete(dvr_entry_t *de);
+
+void dvr_entry_cancel_delete(dvr_entry_t *de);
 
 /**
  * Query interface
