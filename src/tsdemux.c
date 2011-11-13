@@ -110,10 +110,11 @@ ts_recv_packet0(service_t *t, elementary_stream_t *st, const uint8_t *tsb)
 			   got_section, st);
     break;
 
-  default:
-    if(st->es_type == SCT_TELETEXT)
-      teletext_input(t, st, tsb);
+  case SCT_TELETEXT:
+    teletext_input(t, st, tsb);
+    break;
 
+  default:
     if(off > 188)
       break;
 
