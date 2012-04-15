@@ -8,7 +8,7 @@ tvheadend.dvb_muxes = function(adapterData, satConfStore) {
     adapterId = adapterData.identifier;
 
     var fm = Ext.form;
-    
+
     var enabledColumn = new Ext.grid.CheckColumn({
        header: "Enabled",
        dataIndex: 'enabled',
@@ -70,7 +70,7 @@ tvheadend.dvb_muxes = function(adapterData, satConfStore) {
 	    width: 100,
 	    renderer: function(value, metadata, record, row, col, store) {
 		r = satConfStore.getById(value);
-		return typeof r === 'undefined' ? 
+		return typeof r === 'undefined' ?
 		    '<span class="tvh-grid-unset">Unset</span>'
 		    : r.data.name;
 	    }
@@ -94,7 +94,7 @@ tvheadend.dvb_muxes = function(adapterData, satConfStore) {
     cm.defaultSortable = true;
 
     var rec = Ext.data.Record.create([
-	'id', 'enabled','network', 'freq', 'pol', 'satconf', 
+	'id', 'enabled','network', 'freq', 'pol', 'satconf',
 	'muxid', 'quality', 'fe_status', 'mod'
     ]);
 
@@ -113,9 +113,9 @@ tvheadend.dvb_muxes = function(adapterData, satConfStore) {
 	    }
 	}
     });
-  
+
     tvheadend.comet.on('dvbMux', function(m) {
-	
+
 	r = store.getById(m.id)
 	if(typeof r === 'undefined') {
 	    store.reload();
@@ -140,8 +140,8 @@ tvheadend.dvb_muxes = function(adapterData, satConfStore) {
 				 'Please select at least one item to delete');
         }
     };
-    
-    
+
+
     function deleteRecord(btn) {
 	if(btn=='yes') {
 	    var selectedKeys = grid.selModel.selections.keys;
@@ -187,7 +187,7 @@ tvheadend.dvb_muxes = function(adapterData, satConfStore) {
 	     root:'entries',
 	     id: 'identifier',
 	     url:'dvb/adapter',
-	     fields: ['identifier', 
+	     fields: ['identifier',
 		      'name'],
 	     baseParams: {sibling: adapterId}
 	 });
@@ -232,8 +232,8 @@ tvheadend.dvb_muxes = function(adapterData, satConfStore) {
 	 });
 	 win.show();
      }
- 
- 
+
+
     function saveChanges() {
 	var mr = store.getModifiedRecords();
 	var out = new Array();
@@ -246,7 +246,7 @@ tvheadend.dvb_muxes = function(adapterData, satConfStore) {
 	Ext.Ajax.request({
 	    url: "dvb/muxes/" + adapterId,
 	    params: {
-		op:"update", 
+		op:"update",
 		entries:Ext.encode(out)
 	    },
 	    success:function(response,options) {
@@ -257,7 +257,7 @@ tvheadend.dvb_muxes = function(adapterData, satConfStore) {
 	    }
 	});
     }
-       
+
     var selModel = new Ext.grid.RowSelectionModel({
 	singleSelect:false
     });
@@ -331,7 +331,7 @@ tvheadend.dvb_muxes = function(adapterData, satConfStore) {
 tvheadend.dvb_services = function(adapterId) {
 
     var fm = Ext.form;
-    
+
     var enabledColumn = new Ext.grid.CheckColumn({
        header: "Enabled",
        dataIndex: 'enabled',
@@ -504,7 +504,7 @@ tvheadend.dvb_services = function(adapterId) {
     var storeReloader = new Ext.util.DelayedTask(function() {
 	store.reload()
     });
-  
+
     tvheadend.comet.on('dvbService', function(m) {
 	storeReloader.delay(500);
     });
@@ -521,8 +521,8 @@ tvheadend.dvb_services = function(adapterId) {
 				 'Please select at least one item to delete');
         }
     };
-    
- 
+
+
     function saveChanges() {
 	var mr = store.getModifiedRecords();
 	var out = new Array();
@@ -535,7 +535,7 @@ tvheadend.dvb_services = function(adapterId) {
 	Ext.Ajax.request({
 	    url: "dvb/services/" + adapterId,
 	    params: {
-		op:"update", 
+		op:"update",
 		entries:Ext.encode(out)
 	    },
 	    success:function(response,options) {
@@ -546,6 +546,34 @@ tvheadend.dvb_services = function(adapterId) {
 	    }
 	});
     }
+
+    var serviceFilterServiceName = new Ext.form.TextField({
+        emptyText: 'Search service name...',
+        width: 200
+    });
+
+    serviceFilterServiceName.on('valid', function(c) {
+        var value = c.getValue();
+
+        if(value.length < 1)
+            value = null;
+
+        store.filter('svcname', value, true);
+    });
+
+    var serviceFilterChannelName = new Ext.form.TextField({
+        emptyText: 'Search channel name...',
+        width: 200
+    });
+
+    serviceFilterChannelName.on('valid', function(c) {
+        var value = c.getValue();
+
+        if(value.length < 1)
+            value = null;
+
+        store.filter('channelname', value, true);
+    });
 
     var saveBtn = new Ext.Toolbar.Button({
 	tooltip: 'Save any changes made (Changed cells have red borders).',
@@ -564,7 +592,7 @@ tvheadend.dvb_services = function(adapterId) {
 	},
 	disabled: true
     });
-       
+
     var selModel = new Ext.grid.RowSelectionModel({
 	singleSelect:false
     });
@@ -578,7 +606,21 @@ tvheadend.dvb_services = function(adapterId) {
 	cm: cm,
         viewConfig: {forceFit:true},
 	selModel: selModel,
-	tbar: [saveBtn,  rejectBtn]
+	tbar: [
+        serviceFilterServiceName,
+        '-',
+        serviceFilterChannelName,
+        '-',
+        { text: 'Reset', handler: function() {
+            store.clearFilter();
+            serviceFilterServiceName.reset();
+            serviceFilterChannelName.reset();
+            }
+        },
+        '-',
+        saveBtn,
+        rejectBtn
+    ]
     });
     return grid;
 }
@@ -587,7 +629,7 @@ tvheadend.dvb_services = function(adapterId) {
  *
  */
 tvheadend.addMuxByLocation = function(adapterData, satConfStore) {
-    
+
     var addBtn = new Ext.Button({
 	text: 'Add DVB network',
 	disabled: true,
@@ -629,17 +671,17 @@ tvheadend.addMuxByLocation = function(adapterData, satConfStore) {
 	    baseParams: {adapter: adapterData.identifier},
 	    dataUrl:'dvbnetworks'
 	}),
-	
+
 	root: new Ext.tree.AsyncTreeNode({
 	    id:'root'
 	}),
-	
+
 	bbar: [satConfCombo],
 
 	buttons: [addBtn],
 	buttonAlign: 'center'
     });
-    
+
 
     locationList.on('click', function(n) {
 	if(n.attributes.leaf) {
@@ -648,7 +690,7 @@ tvheadend.addMuxByLocation = function(adapterData, satConfStore) {
 	    addBtn.disable();
 	}
     });
-	
+
     win = new Ext.Window({
 	title: 'Add muxes on ' + adapterData.name,
         layout: 'fit',
@@ -672,7 +714,7 @@ tvheadend.addMuxByLocation = function(adapterData, satConfStore) {
  * Add mux by manual configuration
  */
 tvheadend.addMuxManually = function(adapterData, satConfStore) {
-    
+
     var adId = adapterData.identifier;
 
 
@@ -828,7 +870,7 @@ tvheadend.addMuxManually = function(adapterData, satConfStore) {
 	    minValue: adapterData.symrateMin,
 	    maxValue: adapterData.symrateMax
 	}));
- 
+
 	items.push(new Ext.form.ComboBox({
 	    fieldLabel: 'Constellation',
 	    name: 'constellation',
@@ -845,7 +887,7 @@ tvheadend.addMuxManually = function(adapterData, satConfStore) {
 		url: 'dvb/feopts/constellations/' + adId
 	    })
 	}));
-	
+
 	items.push(new Ext.form.ComboBox({
 	    fieldLabel: 'FEC',
 	    name: 'fec',
@@ -880,7 +922,7 @@ tvheadend.addMuxManually = function(adapterData, satConfStore) {
 	    minValue: adapterData.symrateMin,
 	    maxValue: adapterData.symrateMax
 	}));
- 
+
 	items.push(new Ext.form.ComboBox({
 	    fieldLabel: 'FEC',
 	    name: 'fec',
@@ -949,7 +991,7 @@ tvheadend.addMuxManually = function(adapterData, satConfStore) {
 	    })
 	}));
     }
-    
+
     if(satConfStore) {
 	items.push(new Ext.form.ComboBox({
 	    store: satConfStore,
@@ -967,11 +1009,11 @@ tvheadend.addMuxManually = function(adapterData, satConfStore) {
 
     function addMux() {
 	panel.getForm().submit({
-	    url:'dvb/addmux/' + adapterId, 
+	    url:'dvb/addmux/' + adapterId,
 	    waitMsg:'Creating mux...'
 	});
     }
- 
+
 
     var panel = new Ext.FormPanel({
 	frame:true,
@@ -985,7 +1027,7 @@ tvheadend.addMuxManually = function(adapterData, satConfStore) {
 	    text: 'Add',
 	    handler: addMux
         }]
-	
+
     });
 
     win = new Ext.Window({
@@ -1023,7 +1065,7 @@ tvheadend.dvb_adapter_general = function(adapterData, satConfStore) {
 	disabled: adapterData.services == 0 || adapterData.initialMuxes,
 	handler:function() {
 	    Ext.Ajax.request({
-		url:'dvb/adapter/' + adapterId, 
+		url:'dvb/adapter/' + adapterId,
 		params: {
 		    op: 'serviceprobe'
 		}
@@ -1057,10 +1099,10 @@ tvheadend.dvb_adapter_general = function(adapterData, satConfStore) {
     }, ['name', 'automux', 'idlescan', 'diseqcversion', 'qmon',
 	'dumpmux', 'nitoid']);
 
-    
+
     function saveConfForm () {
 	confform.getForm().submit({
-	    url:'dvb/adapter/' + adapterId, 
+	    url:'dvb/adapter/' + adapterId,
 	    params:{'op':'save'},
 	    waitMsg:'Saving Data...'
 	});
@@ -1102,7 +1144,7 @@ tvheadend.dvb_adapter_general = function(adapterData, satConfStore) {
 	}
     ];
 
-    if(satConfStore) { 
+    if(satConfStore) {
 	v = new Ext.form.ComboBox({
 	    name: 'diseqcversion',
 	    fieldLabel: 'DiSEqC version',
@@ -1114,7 +1156,7 @@ tvheadend.dvb_adapter_general = function(adapterData, satConfStore) {
 	});
 	items.push(v);
     }
-    
+
     var confform = new Ext.FormPanel({
 	title:'Adapter configuration',
         columnWidth: .40,
@@ -1134,9 +1176,9 @@ tvheadend.dvb_adapter_general = function(adapterData, satConfStore) {
 	    handler: saveConfForm
         }]
     });
-    
+
     confform.getForm().load({
-	url:'dvb/adapter/' + adapterId, 
+	url:'dvb/adapter/' + adapterId,
 	params:{'op':'load'},
 	success:function(form, action) {
 	    confform.enable();
@@ -1144,9 +1186,9 @@ tvheadend.dvb_adapter_general = function(adapterData, satConfStore) {
     });
 
     /**
-     * Information / capabilities panel 
+     * Information / capabilities panel
      */
-    
+
     var infoTemplate = new Ext.XTemplate(
 	'<h2 style="font-size: 150%">Hardware</h2>' +
 	    '<h3>Device path:</h3>{path}' +
@@ -1155,7 +1197,7 @@ tvheadend.dvb_adapter_general = function(adapterData, satConfStore) {
 	    '<h3><tpl if="satConf != 0">Intermediate </tpl>Frequency range:</h3>{freqMin} kHz - {freqMax} kHz' +
 	    ', in steps of {freqStep} kHz' +
 	    '<tpl if="symrateMin != 0">' +
-	    '<h3>Symbolrate range:</h3>' + 
+	    '<h3>Symbolrate range:</h3>' +
 	    '{symrateMin} Baud - {symrateMax} Baud</tpl>' +
 	    '<h2 style="font-size: 150%">Status</h2>' +
 	    '<h3>Currently tuned to:</h3>{currentMux}&nbsp' +
@@ -1163,7 +1205,7 @@ tvheadend.dvb_adapter_general = function(adapterData, satConfStore) {
 	    '<h3>Muxes:</h3>{muxes}' +
 	    '<h3>Muxes awaiting initial scan:</h3>{initialMuxes}'
     );
-   
+
 
     var infoPanel = new Ext.Panel({
 	title:'Information and capabilities',
@@ -1210,7 +1252,7 @@ tvheadend.dvb_adapter_general = function(adapterData, satConfStore) {
 tvheadend.dvb_dummy = function(title)
 {
     return new Ext.Panel({
-	layout:'fit', 
+	layout:'fit',
 	items:[{border: false}],
 	title: title
     });
@@ -1222,7 +1264,7 @@ tvheadend.dvb_dummy = function(title)
 tvheadend.dvb_satconf = function(adapterId, lnbStore)
 {
     var fm = Ext.form;
- 
+
     var cm = new Ext.grid.ColumnModel([
 	{
 	    header: "Name",
@@ -1262,7 +1304,7 @@ tvheadend.dvb_satconf = function(adapterId, lnbStore)
 	'name','port','comment','lnb'
     ]);
 
-    return new tvheadend.tableEditor('Satellite config', 
+    return new tvheadend.tableEditor('Satellite config',
 				     'dvbsatconf/' + adapterId, cm, rec,
 				     null, null, null);
 }
@@ -1301,14 +1343,14 @@ tvheadend.dvb_adapter = function(data)
 
     if(data.satConf)
 	items.push(new tvheadend.dvb_satconf(data.identifier, lnbStore));
-    
+
     var panel = new Ext.TabPanel({
 	border: false,
-	activeTab:0, 
-	autoScroll:true, 
+	activeTab:0,
+	autoScroll:true,
 	items: items
     });
-    
+
     return panel;
 
 }

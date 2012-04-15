@@ -102,7 +102,7 @@ tvheadend.mergeChannel = function(chan) {
 /**
  *
  */
-tvheadend.chconf = function() 
+tvheadend.chconf = function()
 {
     var xmltvChannels = new Ext.data.JsonStore({
 	root:'entries',
@@ -229,7 +229,7 @@ tvheadend.chconf = function()
 		return value + ' min';
 	    }
 	},
-	    
+
 	editor: new fm.NumberField({
 	    minValue: 0,
 	    maxValue: 1440
@@ -266,7 +266,7 @@ tvheadend.chconf = function()
 				 'Please select at least one item to delete');
         }
     }
-    
+
 
     function deleteRecord(btn) {
 	if(btn=='yes') {
@@ -275,7 +275,7 @@ tvheadend.chconf = function()
 	    Ext.Ajax.request({
 		url: "channels",
 		params: {
-		    op:"delete", 
+		    op:"delete",
 		    entries:Ext.encode(selectedKeys)
 		},
 		failure:function(response,options) {
@@ -297,7 +297,7 @@ tvheadend.chconf = function()
 	Ext.Ajax.request({
 	    url: "channels",
 	    params: {
-		op:"update", 
+		op:"update",
 		entries:Ext.encode(out)
 	    },
 	    success:function(response,options) {
@@ -313,12 +313,26 @@ tvheadend.chconf = function()
 	singleSelect:false
     });
 
+    var channelFilterName = new Ext.form.TextField({
+        emptyText: 'Search name...',
+        width: 200
+    });
+
     var delBtn = new Ext.Toolbar.Button({
 	tooltip: 'Delete one or more selected channels',
 	iconCls:'remove',
 	text: 'Delete selected',
 	handler: delSelected,
 	disabled: true
+    });
+
+    channelFilterName.on('valid', function(c) {
+        var value = c.getValue();
+
+        if(value.length < 1)
+            value = null;
+
+        tvheadend.channels.filter('name', value, true);
     });
 
     selModel.on('selectionchange', function(s) {
@@ -343,7 +357,6 @@ tvheadend.chconf = function()
 	disabled: true
     });
 
-
     var grid = new Ext.grid.EditorGridPanel({
 	stripeRows: true,
 	title: 'Channels',
@@ -357,12 +370,16 @@ tvheadend.chconf = function()
 	},
 	selModel: selModel,
 	tbar: [
-	    delBtn, '-', saveBtn, rejectBtn, '->', {
-	    text: 'Help',
-	    handler: function() {
-		new tvheadend.help('Channels', 'config_channels.html');
-	    }
-	}
+        channelFilterName,
+        '-',
+        { text: 'Reset', handler: function() { tvheadend.channels.clearFilter(); channelFilterName.reset(); } },
+        '-',
+        delBtn,
+        '-',
+        saveBtn,
+        rejectBtn,
+        '->',
+        { text: 'Help', handler: function() { new tvheadend.help('Channels', 'config_channels.html'); } }
 	]
     });
 
