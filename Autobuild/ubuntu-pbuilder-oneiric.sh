@@ -12,8 +12,8 @@ export JOBSARGS
 export JARGS
 
 dpkg-buildpackage -S -sa -rfakeroot || true
-pbuilder-natty update
-pbuilder-natty build ../tvheadend_${VER}.dsc
+pbuilder-oneiric update
+pbuilder-oneiric build ../tvheadend_${VER}.dsc
 
 rm -f ${CHANGELOG}
 dh_clean
