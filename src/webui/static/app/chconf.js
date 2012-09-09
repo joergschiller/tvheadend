@@ -303,12 +303,26 @@ tvheadend.chconf = function()
 	singleSelect:false
     });
 
+    var channelFilterName = new Ext.form.TextField({
+        emptyText: 'Search name...',
+        width: 200
+    });
+
     var delBtn = new Ext.Toolbar.Button({
 	tooltip: 'Delete one or more selected channels',
 	iconCls:'remove',
 	text: 'Delete selected',
 	handler: delSelected,
 	disabled: true
+    });
+
+    channelFilterName.on('valid', function(c) {
+        var value = c.getValue();
+
+        if(value.length < 1)
+            value = null;
+
+        tvheadend.channels.filter('name', value, true);
     });
 
     selModel.on('selectionchange', function(s) {
@@ -347,12 +361,16 @@ tvheadend.chconf = function()
 	},
 	selModel: selModel,
 	tbar: [
-	    delBtn, '-', saveBtn, rejectBtn, '->', {
-	    text: 'Help',
-	    handler: function() {
-		new tvheadend.help('Channels', 'config_channels.html');
-	    }
-	}
+        channelFilterName,
+        '-',
+        { text: 'Reset', handler: function() { tvheadend.channels.clearFilter(); channelFilterName.reset(); } },
+        '-',
+        delBtn,
+        '-',
+        saveBtn,
+        rejectBtn,
+        '->',
+        { text: 'Help', handler: function() { new tvheadend.help('Channels', 'config_channels.html'); } }
 	]
     });
 

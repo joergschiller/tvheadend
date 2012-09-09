@@ -598,6 +598,34 @@ tvheadend.dvb_services = function(adapterId) {
 	});
     }
 
+    var serviceFilterServiceName = new Ext.form.TextField({
+        emptyText: 'Search service name...',
+        width: 200
+    });
+
+    serviceFilterServiceName.on('valid', function(c) {
+        var value = c.getValue();
+
+        if(value.length < 1)
+            value = null;
+
+        store.filter('svcname', value, true);
+    });
+
+    var serviceFilterChannelName = new Ext.form.TextField({
+        emptyText: 'Search channel name...',
+        width: 200
+    });
+
+    serviceFilterChannelName.on('valid', function(c) {
+        var value = c.getValue();
+
+        if(value.length < 1)
+            value = null;
+
+        store.filter('channelname', value, true);
+    });
+
     var saveBtn = new Ext.Toolbar.Button({
 	tooltip: 'Save any changes made (Changed cells have red borders).',
 	iconCls:'save',
@@ -629,7 +657,21 @@ tvheadend.dvb_services = function(adapterId) {
 	cm: cm,
         viewConfig: {forceFit:true},
 	selModel: selModel,
-	tbar: [saveBtn,  rejectBtn]
+	tbar: [
+        serviceFilterServiceName,
+        '-',
+        serviceFilterChannelName,
+        '-',
+        { text: 'Reset', handler: function() {
+            store.clearFilter();
+            serviceFilterServiceName.reset();
+            serviceFilterChannelName.reset();
+            }
+        },
+        '-',
+        saveBtn,
+        rejectBtn
+    ]
     });
     return grid;
 }
