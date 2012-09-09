@@ -59,7 +59,7 @@ psi_section_reassemble0(psi_section_t *ps, const uint8_t *data,
   
   excess = ps->ps_offset - tsize;
 
-  if(crc && crc32(ps->ps_data, tsize, 0xffffffff))
+  if(crc && tvh_crc32(ps->ps_data, tsize, 0xffffffff))
     return -1;
 
   cb(ps->ps_data, tsize - (crc ? 4 : 0), opaque);
@@ -159,14 +159,14 @@ psi_append_crc32(uint8_t *buf, int offset, int maxlen)
   if(offset + 4 > maxlen)
     return -1;
 
-  crc = crc32(buf, offset, 0xffffffff);
+  crc = tvh_crc32(buf, offset, 0xffffffff);
 
   buf[offset + 0] = crc >> 24;
   buf[offset + 1] = crc >> 16;
   buf[offset + 2] = crc >> 8;
   buf[offset + 3] = crc;
 
-  assert(crc32(buf, offset + 4, 0xffffffff) == 0);
+  assert(tvh_crc32(buf, offset + 4, 0xffffffff) == 0);
 
   return offset + 4;
 }
@@ -704,7 +704,7 @@ psi_parse_pmt(service_t *t, const uint8_t *ptr, int len, int chksvcid,
  * PMT generator
  */
 int
-psi_build_pmt(streaming_start_t *ss, uint8_t *buf0, int maxlen, int pcrpid)
+psi_build_pmt(const streaming_start_t *ss, uint8_t *buf0, int maxlen, int pcrpid)
 {
   int c, tlen, dlen, l, i;
   uint8_t *buf, *buf1;
@@ -733,7 +733,7 @@ psi_build_pmt(streaming_start_t *ss, uint8_t *buf0, int maxlen, int pcrpid)
   tlen = 12;
 
   for(i = 0; i < ss->ss_num_components; i++) {
-    streaming_start_component_t *ssc = &ss->ss_components[i];
+    const streaming_start_component_t *ssc = &ss->ss_components[i];
 
     switch(ssc->ssc_type) {
     case SCT_MPEG2VIDEO:
@@ -744,6 +744,7 @@ psi_build_pmt(streaming_start_t *ss, uint8_t *buf0, int maxlen, int pcrpid)
       c = 0x04;
       break;
 
+    case SCT_EAC3:
     case SCT_DVBSUB:
       c = 0x06;
       break;
@@ -804,6 +805,16 @@ psi_build_pmt(streaming_start_t *ss, uint8_t *buf0, int maxlen, int pcrpid)
       buf[6] = DVB_DESC_AC3;
       buf[7] = 1;
       buf[8] = 0; /* XXX: generate real AC3 desc */
+      dlen = 9;
+      break;
+    case SCT_EAC3:
+      buf[0] = DVB_DESC_LANGUAGE;
+      buf[1] = 4;
+      memcpy(&buf[2],ssc->ssc_lang,3);
+      buf[5] = 0; /* Main audio */
+      buf[6] = DVB_DESC_EAC3;
+      buf[7] = 1;
+      buf[8] = 0; /* XXX: generate real EAC3 desc */
       dlen = 9;
       break;
     default:

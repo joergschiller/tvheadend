@@ -148,14 +148,20 @@ extjs_dvbadapter(http_connection_t *hc, const char *remain, void *opaque)
     htsmsg_add_str(r, "device", tda->tda_rootpath ?: "No hardware attached");
     htsmsg_add_str(r, "name", tda->tda_displayname);
     htsmsg_add_u32(r, "automux", tda->tda_autodiscovery);
+    htsmsg_add_u32(r, "skip_initialscan", tda->tda_skip_initialscan);
     htsmsg_add_u32(r, "idlescan", tda->tda_idlescan);
+    htsmsg_add_u32(r, "skip_checksubscr", tda->tda_skip_checksubscr);
     htsmsg_add_u32(r, "qmon", tda->tda_qmon);
     htsmsg_add_u32(r, "dumpmux", tda->tda_dump_muxes);
+    htsmsg_add_u32(r, "poweroff", tda->tda_poweroff);
+    htsmsg_add_u32(r, "sidtochan", tda->tda_sidtochan);
     htsmsg_add_u32(r, "nitoid", tda->tda_nitoid);
+    htsmsg_add_u32(r, "disable_pmt_monitor", tda->tda_disable_pmt_monitor);
     htsmsg_add_str(r, "diseqcversion", 
 		   ((const char *[]){"DiSEqC 1.0 / 2.0",
 				       "DiSEqC 1.1 / 2.1"})
 		   [tda->tda_diseqc_version % 2]);
+    htsmsg_add_u32(r, "extrapriority", tda->tda_extrapriority);
  
     out = json_single_record(r, "dvbadapters");
   } else if(!strcmp(op, "save")) {
@@ -166,14 +172,29 @@ extjs_dvbadapter(http_connection_t *hc, const char *remain, void *opaque)
     s = http_arg_get(&hc->hc_req_args, "automux");
     dvb_adapter_set_auto_discovery(tda, !!s);
 
+    s = http_arg_get(&hc->hc_req_args, "skip_initialscan");
+    dvb_adapter_set_skip_initialscan(tda, !!s);
+
     s = http_arg_get(&hc->hc_req_args, "idlescan");
     dvb_adapter_set_idlescan(tda, !!s);
+
+    s = http_arg_get(&hc->hc_req_args, "skip_checksubscr");
+    dvb_adapter_set_skip_checksubscr(tda, !!s);
 
     s = http_arg_get(&hc->hc_req_args, "qmon");
     dvb_adapter_set_qmon(tda, !!s);
 
+    s = http_arg_get(&hc->hc_req_args, "poweroff");
+    dvb_adapter_set_poweroff(tda, !!s);
+
+    s = http_arg_get(&hc->hc_req_args, "sidtochan");
+    dvb_adapter_set_sidtochan(tda, !!s);
+
     s = http_arg_get(&hc->hc_req_args, "dumpmux");
     dvb_adapter_set_dump_muxes(tda, !!s);
+
+    s = http_arg_get(&hc->hc_req_args, "disable_pmt_monitor");
+    dvb_adapter_set_disable_pmt_monitor(tda, !!s);
 
     if((s = http_arg_get(&hc->hc_req_args, "nitoid")) != NULL)
       dvb_adapter_set_nitoid(tda, atoi(s));
@@ -184,6 +205,9 @@ extjs_dvbadapter(http_connection_t *hc, const char *remain, void *opaque)
       else if(!strcmp(s, "DiSEqC 1.1 / 2.1"))
 	dvb_adapter_set_diseqc_version(tda, 1);
     }
+
+    if((s = http_arg_get(&hc->hc_req_args, "extrapriority")) != NULL)
+      dvb_adapter_set_extrapriority(tda, atoi(s));
 
     out = htsmsg_create_map();
     htsmsg_add_u32(out, "success", 1);

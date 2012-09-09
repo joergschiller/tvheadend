@@ -79,6 +79,8 @@ typedef struct htsmsg_field {
 
 #define htsmsg_get_map_by_field(f) \
  ((f)->hmf_type == HMF_MAP ? &(f)->hmf_msg : NULL)
+#define htsmsg_get_list_by_field(f) \
+ ((f)->hmf_type == HMF_LIST ? &(f)->hmf_msg : NULL)
 
 #define HTSMSG_FOREACH(f, msg) TAILQ_FOREACH(f, &(msg)->hm_fields, hmf_link)
 
@@ -106,6 +108,11 @@ void htsmsg_add_u32(htsmsg_t *msg, const char *name, uint32_t u32);
  * Add an integer field where source is signed 32 bit.
  */
 void htsmsg_add_s32(htsmsg_t *msg, const char *name,  int32_t s32);
+
+/**
+ * Add an integer field where source is unsigned 64 bit.
+ */
+void htsmsg_add_u64(htsmsg_t *msg, const char *name,  uint64_t u64);
 
 /**
  * Add an integer field where source is signed 64 bit.
@@ -170,6 +177,15 @@ int htsmsg_get_s32(htsmsg_t *msg, const char *name,  int32_t *s32p);
  *              out of range for the requested storage.
  */
 int htsmsg_get_s64(htsmsg_t *msg, const char *name,  int64_t *s64p);
+
+/**
+ * Get an integer as an unsigned 64 bit integer.
+ *
+ * @return HTSMSG_ERR_FIELD_NOT_FOUND - Field does not exist
+ *         HTSMSG_ERR_CONVERSION_IMPOSSIBLE - Field is not an integer or
+ *              out of range for the requested storage.
+ */
+int htsmsg_get_u64(htsmsg_t *msg, const char *name,  uint64_t *u64p);
 
 /**
  * Get pointer to a binary field. No copying of data is performed.

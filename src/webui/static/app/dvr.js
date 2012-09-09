@@ -27,6 +27,16 @@ tvheadend.dvrprio = new Ext.data.SimpleStore({
     ]
 });
 
+// For the container configuration
+tvheadend.containers = new Ext.data.SimpleStore({
+    fields: ['identifier','name'],
+    id: 0,
+    data: [
+	['matroska','Matroska'],
+	['pass','Pass-through']
+    ]
+});
+
 /**
  * Configuration names
  */
@@ -446,6 +456,19 @@ tvheadend.autoreceditor = function() {
 		emptyText: 'Only include channel...'
 	    })
 	},{
+    header : "Brand",
+    dataIndex: 'brand',
+    editor : new Ext.form.ComboBox({
+      loadingText: 'Loading...',
+      displayField: 'title',
+      valueField: 'uri',
+      store: tvheadend.brands,
+      mode: 'local',
+      editable: false,
+      triggerAction: 'all',
+      emptyText: 'Record brand...'
+    })
+  },{
 	    header: "Channel tag",
 	    dataIndex: 'tag',
 	    editor: new Ext.form.ComboBox({
@@ -457,9 +480,13 @@ tvheadend.autoreceditor = function() {
 		emptyText: 'Only include tag...'
 	    })
 	},{
-	    header: "Content Group",
-	    dataIndex: 'contentgrp',
+	    header: "Genre",
+	    dataIndex: 'contenttype',
+      renderer: function(v) {
+        return tvheadend.contentGroupLookupName(v);
+      },
 	    editor: new Ext.form.ComboBox({
+    valueField: 'code',
 		displayField:'name',
 		store: tvheadend.ContentGroupStore,
 		mode: 'local',
@@ -622,7 +649,7 @@ tvheadend.dvr = function() {
 
     
     tvheadend.autorecRecord = Ext.data.Record.create([
-	'enabled','title','channel','tag','creator','contentgrp','comment',
+	'enabled','title', 'brand', 'channel','tag','creator','contenttype','comment',
 	'weekdays', 'pri', 'approx_time', 'config_name'
     ]);
     
@@ -664,7 +691,7 @@ tvheadend.dvrsettings = function() {
     var confreader = new Ext.data.JsonReader({
 	root: 'dvrSettings'
     }, ['storage','postproc','retention','dayDirs',
-	'channelDirs','channelInTitle',
+	'channelDirs','channelInTitle', 'container',
 	'dateInTitle','timeInTitle',
 	'preExtraTime', 'postExtraTime', 'whitespaceInTitle', 
 	'titleDirs', 'episodeInTitle', 'cleanTitle', 'tagFiles']);
@@ -704,7 +731,16 @@ tvheadend.dvrsettings = function() {
 	    width: 300,
 	    fieldLabel: 'Recording system path',
 	    name: 'storage'
-	}, new Ext.form.NumberField({
+	}, new Ext.form.ComboBox({
+	    store: tvheadend.containers,
+	    fieldLabel: 'Media container',
+	    mode: 'local',
+	    triggerAction: 'all',
+	    displayField: 'name',
+	    valueField: 'identifier',
+	    editable: false,
+	    hiddenName: 'container'
+	}), new Ext.form.NumberField({
 	    allowNegative: false,
 	    allowDecimals: false,
 	    minValue: 1,

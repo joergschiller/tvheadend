@@ -60,13 +60,14 @@ page_simple(http_connection_t *hc,
 {
   htsbuf_queue_t *hq = &hc->hc_reply;
   const char *s = http_arg_get(&hc->hc_req_args, "s");
-  event_t *e;
+  epg_broadcast_t *e;
   int c, k, i;
   struct tm a, b, day;
   dvr_entry_t *de;
   dvr_query_result_t dqr;
-  const char *rstatus;
+  const char *rstatus = NULL;
   epg_query_result_t eqr;
+  const char *lang  = http_arg_get(&hc->hc_args, "Accept-Language");
 
   htsbuf_qprintf(hq, "<html>");
   htsbuf_qprintf(hq, "<body>");
@@ -86,7 +87,7 @@ page_simple(http_connection_t *hc,
 
   if(s != NULL) {
     
-    epg_query(&eqr, NULL, NULL, NULL, s);
+    epg_query(&eqr, NULL, NULL, NULL, s, lang);
     epg_query_sort(&eqr);
 
     c = eqr.eqr_entries;
@@ -108,8 +109,8 @@ page_simple(http_connection_t *hc,
       for(k = 0; k < c; k++) {
 	e = eqr.eqr_array[k];
       
-	localtime_r(&e->e_start, &a);
-	localtime_r(&e->e_stop, &b);
+	localtime_r(&e->start, &a);
+	localtime_r(&e->stop, &b);
 
 	if(a.tm_wday != day.tm_wday || a.tm_mday != day.tm_mday  ||
 	   a.tm_mon  != day.tm_mon  || a.tm_year != day.tm_year) {
@@ -123,12 +124,13 @@ page_simple(http_connection_t *hc,
 	rstatus = de != NULL ? val2str(de->de_sched_state,
 				       recstatustxt) : NULL;
 
+  s = epg_episode_get_title(e->episode, lang);
 	htsbuf_qprintf(hq, 
-		    "<a href=\"/eventinfo/%d\">"
+		    "<a href=\"/eventinfo/%"PRIu64"\">"
 		    "%02d:%02d-%02d:%02d&nbsp;%s%s%s</a><br>",
-		    e->e_id,
+		    e->id,
 		    a.tm_hour, a.tm_min, b.tm_hour, b.tm_min,
-		    e->e_title,
+        s ?: "",
 		    rstatus ? "&nbsp;" : "", rstatus ?: "");
       }
     }
@@ -171,7 +173,7 @@ page_simple(http_connection_t *hc,
     
     htsbuf_qprintf(hq, 
 		"%02d:%02d-%02d:%02d&nbsp; %s",
-		a.tm_hour, a.tm_min, b.tm_hour, b.tm_min, de->de_title);
+		a.tm_hour, a.tm_min, b.tm_hour, b.tm_min, lang_str_get(de->de_title, NULL));
 
     htsbuf_qprintf(hq, "</a>");
 
@@ -194,15 +196,17 @@ static int
 page_einfo(http_connection_t *hc, const char *remain, void *opaque)
 {
   htsbuf_queue_t *hq = &hc->hc_reply;
-  event_t *e;
+  epg_broadcast_t *e;
   struct tm a, b;
   dvr_entry_t *de;
   const char *rstatus;
   dvr_entry_sched_state_t dvr_status;
+  const char *lang  = http_arg_get(&hc->hc_args, "Accept-Language");
+  const char *s;
 
   pthread_mutex_lock(&global_lock);
 
-  if(remain == NULL || (e = epg_event_find_by_id(atoi(remain))) == NULL) {
+  if(remain == NULL || (e = epg_broadcast_find_by_id(atoi(remain), NULL)) == NULL) {
     pthread_mutex_unlock(&global_lock);
     return 404;
   }
@@ -210,7 +214,7 @@ page_einfo(http_connection_t *hc, const char *remain, void *opaque)
   de = dvr_entry_find_by_event(e);
 
   if((http_arg_get(&hc->hc_req_args, "rec")) != NULL) {
-    de = dvr_entry_create_by_event("", e, hc->hc_username ?: "anonymous", NULL,
+    de = dvr_entry_create_by_event("", e, 0, 0, hc->hc_username ?: "anonymous", NULL,
 				   DVR_PRIO_NORMAL);
   } else if(de != NULL && (http_arg_get(&hc->hc_req_args, "cancel")) != NULL) {
     de = dvr_entry_cancel(de);
@@ -219,24 +223,25 @@ page_einfo(http_connection_t *hc, const char *remain, void *opaque)
   htsbuf_qprintf(hq, "<html>");
   htsbuf_qprintf(hq, "<body>");
 
-  localtime_r(&e->e_start, &a);
-  localtime_r(&e->e_stop, &b);
+  localtime_r(&e->start, &a);
+  localtime_r(&e->stop, &b);
 
   htsbuf_qprintf(hq, 
 	      "%s, %d/%d %02d:%02d - %02d:%02d<br>",
 	      days[a.tm_wday], a.tm_mday, a.tm_mon + 1,
 	      a.tm_hour, a.tm_min, b.tm_hour, b.tm_min);
 
+  s = epg_episode_get_title(e->episode, lang);
   htsbuf_qprintf(hq, "<hr><b>\"%s\": \"%s\"</b><br><br>",
-	      e->e_channel->ch_name, e->e_title);
+	      e->channel->ch_name, s ?: "");
   
   dvr_status = de != NULL ? de->de_sched_state : DVR_NOSTATE;
 
   if((rstatus = val2str(dvr_status, recstatustxt)) != NULL)
     htsbuf_qprintf(hq, "Recording status: %s<br>", rstatus);
 
-  htsbuf_qprintf(hq, "<form method=\"post\" action=\"/eventinfo/%d\">", 
-		 e->e_id);
+  htsbuf_qprintf(hq, "<form method=\"post\" action=\"/eventinfo/%"PRIu64"\">",
+		 e->id);
 
   switch(dvr_status) {
   case DVR_SCHEDULED:
@@ -260,7 +265,13 @@ page_einfo(http_connection_t *hc, const char *remain, void *opaque)
   }
 
   htsbuf_qprintf(hq, "</form>");
-  htsbuf_qprintf(hq, "%s", e->e_desc);
+  if (e->episode) {
+    if ( e->episode->description )
+      htsbuf_qprintf(hq, "%s", lang_str_get(e->episode->description, NULL));
+    else if ( e->episode->summary )
+      htsbuf_qprintf(hq, "%s", lang_str_get(e->episode->summary, NULL));
+  }
+  
 
   pthread_mutex_unlock(&global_lock);
 
@@ -311,7 +322,7 @@ page_pvrinfo(http_connection_t *hc, const char *remain, void *opaque)
 	      a.tm_hour, a.tm_min, b.tm_hour, b.tm_min);
 
   htsbuf_qprintf(hq, "<hr><b>\"%s\": \"%s\"</b><br><br>",
-	      de->de_channel->ch_name, de->de_title);
+	      de->de_channel->ch_name, lang_str_get(de->de_title, NULL));
   
   if((rstatus = val2str(de->de_sched_state, recstatustxt)) != NULL)
     htsbuf_qprintf(hq, "Recording status: %s<br>", rstatus);
@@ -337,7 +348,7 @@ page_pvrinfo(http_connection_t *hc, const char *remain, void *opaque)
   }
 
   htsbuf_qprintf(hq, "</form>");
-  htsbuf_qprintf(hq, "%s", de->de_desc);
+  htsbuf_qprintf(hq, "%s", lang_str_get(de->de_desc, NULL));
 
   pthread_mutex_unlock(&global_lock);
 
@@ -347,7 +358,6 @@ page_pvrinfo(http_connection_t *hc, const char *remain, void *opaque)
   return 0;
 }
 
-
 /**
  * 
  */
@@ -356,16 +366,29 @@ page_status(http_connection_t *hc,
 	    const char *remain, void *opaque)
 {
   htsbuf_queue_t *hq = &hc->hc_reply;
-  int c, i, cc, timeleft, timelefttemp;
+  int c, i, cc, timeleft, timelefttemp, loads;
   struct tm a, b;
   dvr_entry_t *de;
   dvr_query_result_t dqr;
   const char *rstatus;
   time_t     now;
+  double avg[3]; 
+  char buf[500];
 
   htsbuf_qprintf(hq, "<?xml version=\"1.0\"?>\n"
-		 "<currentload>\n"
-		 "<recordings>\n");
+                 "<currentload>\n");
+
+  loads = getloadavg (avg, 3); 
+  if (loads == -1) {
+        tvhlog(LOG_DEBUG, "webui",  "Error getting load average from getloadavg()");
+        loads = 0;
+        /* should we return an error or a 0 on error */
+        htsbuf_qprintf(hq, "<systemload>0</systemload>\n");
+  } else {
+        htsbuf_qprintf(hq, "<systemload>%f,%f,%f</systemload>\n",avg[0],avg[1],avg[2]);
+  };
+
+  htsbuf_qprintf(hq,"<recordings>\n");
 
   pthread_mutex_lock(&global_lock);
 
@@ -392,19 +415,20 @@ page_status(http_connection_t *hc,
       localtime_r(&de->de_start, &a);
       localtime_r(&de->de_stop, &b);
 
+      html_escape(buf, lang_str_get(de->de_title, NULL), sizeof(buf));
       htsbuf_qprintf(hq, 
 		    "<recording>"
 		     "<start>"
 		     "<date>%02d/%02d/%02d</date>"
 		     "<time>%02d:%02d</time>"
-		     "<unixtime>%d</unixtime>"
-		     "<extra_start>%d</extra_start>"
+		     "<unixtime>%"PRItime_t"</unixtime>"
+		     "<extra_start>%"PRItime_t"</extra_start>"
 		     "</start>"
 		     "<stop>"
 		     "<date>%02d/%02d/%02d</date>"
 		     "<time>%02d:%02d</time>"
-		     "<unixtime>%d</unixtime>"
-		     "<extra_stop>%d</extra_stop>"
+		     "<unixtime>%"PRItime_t"</unixtime>"
+		     "<extra_stop>%"PRItime_t"</extra_stop>"
 		     "</stop>"
 		     "<title>%s</title>",
 		     a.tm_year + 1900, a.tm_mon, a.tm_mday, 
@@ -414,11 +438,12 @@ page_status(http_connection_t *hc,
 		     b.tm_year+1900, b.tm_mon, b.tm_mday, 
 		     b.tm_hour, b.tm_min, 
 		     de->de_stop, 
-		     de->de_stop_extra, 
-		     de->de_title);
+		     de->de_stop_extra,
+         buf);
 
       rstatus = val2str(de->de_sched_state, recstatustxt);
-      htsbuf_qprintf(hq, "<status>%s</status></recording>\n", rstatus);
+      html_escape(buf, rstatus, sizeof(buf));
+      htsbuf_qprintf(hq, "<status>%s</status></recording>\n", buf);
       cc++;
       timeleft = -1;
     }

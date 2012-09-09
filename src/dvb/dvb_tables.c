@@ -42,67 +42,16 @@
 #include "notify.h"
 #include "cwc.h"
 
-#define TDT_CRC           0x1
-#define TDT_QUICKREQ      0x2
-#define TDT_CA		  0x4
-
-static void dvb_table_add_pmt(th_dvb_mux_instance_t *tdmi, int pmt_pid);
-
 static int tdt_id_tally;
-
-/**
- *
- */
-typedef struct th_dvb_table {
-  /**
-   * Flags, must never be changed after creation.
-   * We inspect it without holding global_lock
-   */
-  int tdt_flags;
-
-  /**
-   * Cycle queue
-   * Tables that did not get a fd or filter in hardware will end up here
-   * waiting for any other table to be received so it can reuse that fd.
-   * Only linked if fd == -1
-   */
-  TAILQ_ENTRY(th_dvb_table) tdt_pending_link;
-
-  /**
-   * File descriptor for filter
-   */
-  int tdt_fd;
-
-  LIST_ENTRY(th_dvb_table) tdt_link;
-
-  char *tdt_name;
-
-  void *tdt_opaque;
-  int (*tdt_callback)(th_dvb_mux_instance_t *tdmi, uint8_t *buf, int len,
-		      uint8_t tableid, void *opaque);
-
-
-  int tdt_count;
-  int tdt_pid;
-
-  struct dmx_sct_filter_params *tdt_fparams;
-
-  int tdt_id;
-
-} th_dvb_table_t;
-
-
-
 
 /**
  * Helper for preparing a section filter parameter struct
  */
-static struct dmx_sct_filter_params *
+struct dmx_sct_filter_params *
 dvb_fparams_alloc(void)
 {
   return calloc(1, sizeof(struct dmx_sct_filter_params));
 }
-
 
 /**
  *
@@ -123,6 +72,7 @@ dvb_table_fastswitch(th_dvb_mux_instance_t *tdmi)
 
   tdmi->tdmi_table_initial = 0;
   tda->tda_initial_num_mux--;
+  dvb_mux_save(tdmi);
 
 
   dvb_mux_nicename(buf, sizeof(buf), tdmi);
@@ -201,7 +151,7 @@ dvb_proc_table(th_dvb_mux_instance_t *tdmi, th_dvb_table_t *tdt, uint8_t *sec,
 
   /* It seems some hardware (or is it the dvb API?) does not
      honour the DMX_CHECK_CRC flag, so we check it again */
-  if(chkcrc && crc32(sec, r, 0xffffffff))
+  if(chkcrc && tvh_crc32(sec, r, 0xffffffff))
     return;
       
   r -= 3;
@@ -217,6 +167,8 @@ dvb_proc_table(th_dvb_mux_instance_t *tdmi, th_dvb_table_t *tdt, uint8_t *sec,
   if(tdt->tdt_flags & TDT_CA)
     ret = tdt->tdt_callback((th_dvb_mux_instance_t *)tdt,
                                 sec, len + 3, tableid, tdt->tdt_opaque);
+  else if(tdt->tdt_flags & TDT_TDT)
+    ret = tdt->tdt_callback(tdmi, ptr, len, tableid, tdt);
   else
     ret = tdt->tdt_callback(tdmi, ptr, len, tableid, tdt->tdt_opaque);
   
@@ -323,7 +275,7 @@ dvb_tdt_destroy(th_dvb_adapter_t *tda, th_dvb_mux_instance_t *tdmi,
 /**
  * Add a new DVB table
  */
-static void
+void
 tdt_add(th_dvb_mux_instance_t *tdmi, struct dmx_sct_filter_params *fparams,
 	int (*callback)(th_dvb_mux_instance_t *tdmi, uint8_t *buf, int len,
 			 uint8_t tableid, void *opaque), void *opaque,
@@ -331,10 +283,15 @@ tdt_add(th_dvb_mux_instance_t *tdmi, struct dmx_sct_filter_params *fparams,
 {
   th_dvb_table_t *t;
 
+  // Allow multiple entries per PID, but only one per callback/opaque instance
+  // TODO: this could mean reading the same data multiple times, and not
+  //       sure how well this will work! I know Andreas has some thoughts on
+  //       this
   LIST_FOREACH(t, &tdmi->tdmi_tables, tdt_link) {
-    if(pid == t->tdt_pid) {
-      free(tdt);
-      free(fparams);
+    if(pid == t->tdt_pid && 
+       t->tdt_callback == callback && t->tdt_opaque == opaque) {
+      if (tdt)     free(tdt);
+      if (fparams) free(fparams);
       return;
     }
   }
@@ -363,95 +320,6 @@ tdt_add(th_dvb_mux_instance_t *tdmi, struct dmx_sct_filter_params *fparams,
   tdt_open_fd(tdmi, tdt);
 }
 
-
-/**
- * DVB Descriptor; Short Event
- */
-static int
-dvb_desc_short_event(uint8_t *ptr, int len, 
-		     char *title, size_t titlelen,
-		     char *desc,  size_t desclen,
-		     char *dvb_default_charset)
-{
-  int r;
-
-  if(len < 4)
-    return -1;
-  ptr += 3; len -= 3;
-
-  if((r = dvb_get_string_with_len(title, titlelen, ptr, len, dvb_default_charset)) < 0)
-    return -1;
-  ptr += r; len -= r;
-
-  if((r = dvb_get_string_with_len(desc, desclen, ptr, len, dvb_default_charset)) < 0)
-    return -1;
-
-  return 0;
-}
-
-/**
- * DVB Descriptor; Extended Event
- */
-static int
-dvb_desc_extended_event(uint8_t *ptr, int len, 
-		     char *desc, size_t desclen,
-		     char *item, size_t itemlen,
-                     char *text, size_t textlen,
-                     char *dvb_default_charset)
-{
-  int count = ptr[4], r;
-  uint8_t *localptr = ptr + 5, *items = localptr; 
-  int locallen = len - 5;
-
-  /* terminate buffers */
-  desc[0] = '\0'; item[0] = '\0'; text[0] = '\0';
-
-  while (items < (localptr + count))
-  {
-    /* this only makes sense if we have 2 or more character left in buffer */
-    if ((desclen - strlen(desc)) > 2)
-    {
-      /* get description -> append to desc if space left */
-      if (desc[0] != '\0')
-        strncat(desc, "\n", 1);
-      if((r = dvb_get_string_with_len(desc + strlen(desc),
-                                      desclen - strlen(desc),
-                                      items, (localptr + count) - items,
-                                      dvb_default_charset)) < 0)
-        return -1;
-    }
-
-    items += 1 + items[0];
-
-    /* this only makes sense if we have 2 or more character left in buffer */
-    if ((itemlen - strlen(item)) > 2)
-    {
-      /* get item -> append to item if space left */
-      if (item[0] != '\0')
-        strncat(item, "\n", 1);
-      if((r = dvb_get_string_with_len(item + strlen(item),
-                                      itemlen - strlen(item),
-                                      items, (localptr + count) - items,
-                                      dvb_default_charset)) < 0)
-        return -1;
-    }
-
-    /* go to next item */
-    items += 1 + items[0];
-  }
-
-  localptr += count;
-  locallen -= count;
-  count = localptr[0];
-
-  /* get text */
-  if((r = dvb_get_string_with_len(text, textlen, localptr, locallen, dvb_default_charset)) < 0)
-    return -1;
-
-  return 0;
-}
-
-
 /**
  * DVB Descriptor; Service
  */
@@ -470,177 +338,15 @@ dvb_desc_service(uint8_t *ptr, int len, uint8_t *typep,
   ptr++;
   len--;
 
-  if((r = dvb_get_string_with_len(provider, providerlen, ptr, len, NULL)) < 0)
+  if((r = dvb_get_string_with_len(provider, providerlen, ptr, len, NULL, NULL)) < 0)
     return -1;
   ptr += r; len -= r;
 
-  if((r = dvb_get_string_with_len(name, namelen, ptr, len, NULL)) < 0)
+  if((r = dvb_get_string_with_len(name, namelen, ptr, len, NULL, NULL)) < 0)
     return -1;
   ptr += r; len -= r;
   return 0;
 }
-
-
-/**
- * DVB EIT (Event Information Table)
- */
-static int
-dvb_eit_callback(th_dvb_mux_instance_t *tdmi, uint8_t *ptr, int len,
-		 uint8_t tableid, void *opaque)
-{
-  service_t *t;
-  channel_t *ch;
-  th_dvb_adapter_t *tda = tdmi->tdmi_adapter;
-
-  uint16_t serviceid;
-  uint16_t transport_stream_id;
-
-  uint16_t event_id;
-  time_t start_time, stop_time;
-
-  int duration;
-  int dllen;
-  uint8_t dtag, dlen;
-
-  char title[256];
-  char desc[5000];
-  char extdesc[5000];
-  char extitem[5000];
-  char exttext[5000];
-
-  event_t *e;
-
-  lock_assert(&global_lock);
-
-  //  printf("EIT!, tid = %x\n", tableid);
-
-  if(tableid < 0x4e || tableid > 0x6f || len < 11)
-    return -1;
-
-  serviceid                   = ptr[0] << 8 | ptr[1];
-  //  version                     = ptr[2] >> 1 & 0x1f;
-  //  section_number              = ptr[3];
-  //  last_section_number         = ptr[4];
-  transport_stream_id         = ptr[5] << 8 | ptr[6];
-  //  original_network_id         = ptr[7] << 8 | ptr[8];
-  //  segment_last_section_number = ptr[9];
-  //  last_table_id               = ptr[10];
-
-  if((ptr[2] & 1) == 0) {
-    /* current_next_indicator == next, skip this */
-    return -1;
-  }
-
-  len -= 11;
-  ptr += 11;
-
-  /* Search all muxes on adapter */
-  LIST_FOREACH(tdmi, &tda->tda_muxes, tdmi_adapter_link)
-    if(tdmi->tdmi_transport_stream_id == transport_stream_id)
-      break;
-  
-  if(tdmi == NULL)
-    return -1;
-
-  t = dvb_transport_find(tdmi, serviceid, 0, NULL);
-  if(t == NULL || !t->s_enabled || (ch = t->s_ch) == NULL)
-    return 0;
-
-  if(!t->s_dvb_eit_enable)
-    return 0;
-
-  while(len >= 12) {
-    event_id                  = ptr[0] << 8 | ptr[1];
-    start_time                = dvb_convert_date(&ptr[2]);
-    duration                  = bcdtoint(ptr[7] & 0xff) * 3600 +
-                                bcdtoint(ptr[8] & 0xff) * 60 +
-                                bcdtoint(ptr[9] & 0xff);
-    dllen                     = ((ptr[10] & 0x0f) << 8) | ptr[11];
-
-    len -= 12;
-    ptr += 12;
-
-    if(dllen > len)
-      break;
-    stop_time = start_time + duration;
-
-    if(stop_time < dispatch_clock) {
-      /* Already come to pass, skip over it */
-      len -= dllen;
-      ptr += dllen;
-      continue;
-    }
-
-    if((e = epg_event_create(ch, start_time, start_time + duration,
-			     event_id, NULL)) == NULL) {
-      len -= dllen;
-      ptr += dllen;
-      continue;
-    }
-    int changed = 0;
-
-    *title = 0;
-    *desc = 0;
-    while(dllen > 0) {
-      dtag = ptr[0];
-      dlen = ptr[1];
-
-      len -= 2; ptr += 2; dllen -= 2; 
-
-      if(dlen > len)
-	break;
-
-      switch(dtag) {
-      case DVB_DESC_SHORT_EVENT:
-	if(!dvb_desc_short_event(ptr, dlen,
-				 title, sizeof(title),
-				 desc,  sizeof(desc),
-				 t->s_dvb_default_charset)) {
-	  changed |= epg_event_set_title(e, title);
-	  changed |= epg_event_set_desc(e, desc);
-	}
-	break;
-
-      case DVB_DESC_CONTENT:
-	if(dlen >= 2) {
-	  /* We only support one content type per event atm. */
-	  changed |= epg_event_set_content_type(e, (*ptr) >> 4);
-	}
-	break;
-      case DVB_DESC_EXT_EVENT:
-        if(!dvb_desc_extended_event(ptr, dlen,
-              extdesc, sizeof(extdesc),
-              extitem, sizeof(extitem),
-              exttext, sizeof(exttext),
-              t->s_dvb_default_charset)) {
-          
-          char language[4];
-          memcpy(language, &ptr[1], 3);
-          language[3] = '\0';
-          int desc_number = (ptr[0] & 0xF0) >> 4;
-          //int desc_last   = (ptr[0] & 0x0F);
-          
-          if (strlen(extdesc))
-            changed |= epg_event_set_ext_desc(e, desc_number, extdesc);
-          if (strlen(extitem))
-            changed |= epg_event_set_ext_item(e, desc_number, extitem);
-          if (strlen(exttext))
-	    changed |= epg_event_set_ext_text(e, desc_number, exttext);
-        }
-        break;
-      default: 
-        break;
-      }
-
-      len -= dlen; ptr += dlen; dllen -= dlen;
-    }
-
-    if(changed)
-      epg_event_updated(e);
-  }
-  return 0;
-}
-
 
 /**
  * DVB SDT (Service Description Table)
@@ -812,8 +518,10 @@ dvb_pat_callback(th_dvb_mux_instance_t *tdmi, uint8_t *ptr, int len,
     pmt     = (ptr[2] & 0x1f) << 8 | ptr[3];
 
     if(service != 0 && pmt != 0) {
-      dvb_transport_find(tdmi, service, pmt, NULL);
-      dvb_table_add_pmt(tdmi, pmt);
+      int save = 0;
+      dvb_transport_find2(tdmi, service, pmt, NULL, &save);
+      if (save || !tda->tda_disable_pmt_monitor)
+        dvb_table_add_pmt(tdmi, pmt);
     }
     ptr += 4;
     len -= 4;
@@ -1057,7 +765,7 @@ dvb_table_local_channel(th_dvb_mux_instance_t *tdmi, uint8_t *ptr, int len,
   if(tdmi == NULL)
     return;
 
-  while(len > 4) {
+  while(len >= 4) {
     sid = (ptr[0] << 8) | ptr[1];
     chan = ((ptr[2] & 3) << 8) | ptr[3];
 
@@ -1126,7 +834,7 @@ dvb_nit_callback(th_dvb_mux_instance_t *tdmi, uint8_t *ptr, int len,
 
     switch(tag) {
     case DVB_DESC_NETWORK_NAME:
-      if(dvb_get_string(networkname, sizeof(networkname), ptr, tlen, NULL))
+      if(dvb_get_string(networkname, sizeof(networkname), ptr, tlen, NULL, NULL))
 	return -1;
 
       if(strcmp(tdmi->tdmi_network ?: "", networkname))
@@ -1166,14 +874,16 @@ dvb_nit_callback(th_dvb_mux_instance_t *tdmi, uint8_t *ptr, int len,
 
       switch(tag) {
       case DVB_DESC_SAT:
-	dvb_table_sat_delivery(tdmi, ptr, tlen, tsid);
-	break;
+        if(tdmi->tdmi_adapter->tda_type == FE_QPSK)
+          dvb_table_sat_delivery(tdmi, ptr, tlen, tsid);
+        break;
       case DVB_DESC_CABLE:
-	dvb_table_cable_delivery(tdmi, ptr, tlen, tsid);
-	break;
+        if(tdmi->tdmi_adapter->tda_type == FE_QAM)
+          dvb_table_cable_delivery(tdmi, ptr, tlen, tsid);
+        break;
       case DVB_DESC_LOCAL_CHAN:
-	dvb_table_local_channel(tdmi, ptr, tlen, tsid);
-	break;
+        dvb_table_local_channel(tdmi, ptr, tlen, tsid);
+        break;
       }
 
       ptr += tlen;
@@ -1275,13 +985,21 @@ static int
 dvb_pmt_callback(th_dvb_mux_instance_t *tdmi, uint8_t *ptr, int len,
 		 uint8_t tableid, void *opaque)
 {
+  int active = 0;
   service_t *t;
+  th_dvb_table_t *tdt = opaque;
 
   LIST_FOREACH(t, &tdmi->tdmi_transports, s_group_link) {
     pthread_mutex_lock(&t->s_stream_mutex);
     psi_parse_pmt(t, ptr, len, 1, 1);
+    if (t->s_pmt_pid == tdt->tdt_pid && t->s_status == SERVICE_RUNNING)
+      active = 1;
     pthread_mutex_unlock(&t->s_stream_mutex);
   }
+  
+  if (tdmi->tdmi_adapter->tda_disable_pmt_monitor && !active)
+    dvb_tdt_destroy(tdmi->tdmi_adapter, tdmi, tdt);
+
   return 0;
 }
 
@@ -1311,15 +1029,15 @@ dvb_table_add_default_dvb(th_dvb_mux_instance_t *tdmi)
 
   fp = dvb_fparams_alloc();
   fp->filter.filter[0] = 0x42;
+  // Note: DishNet (EchoStar) send SDT on 0x46 rather than 0x42
+  if (tdmi->tdmi_network != NULL) {
+    if(strstr(tdmi->tdmi_network,"EchoStar")!=NULL) {
+      fp->filter.filter[0] = 0x46;
+    }
+  }
   fp->filter.mask[0] = 0xff;
   tdt_add(tdmi, fp, dvb_sdt_callback, NULL, "sdt", 
 	  TDT_QUICKREQ | TDT_CRC, 0x11, NULL);
-
-  /* Event Information table */
-
-  fp = dvb_fparams_alloc();
-  tdt_add(tdmi, fp, dvb_eit_callback, NULL, "eit", 
-	  TDT_CRC, 0x12, NULL);
 }
 
 
@@ -1391,7 +1109,7 @@ dvb_table_add_default(th_dvb_mux_instance_t *tdmi)
 /**
  * Setup FD + demux for a services PMT
  */
-static void
+void
 dvb_table_add_pmt(th_dvb_mux_instance_t *tdmi, int pmt_pid)
 {
   struct dmx_sct_filter_params *fp;
@@ -1402,7 +1120,18 @@ dvb_table_add_pmt(th_dvb_mux_instance_t *tdmi, int pmt_pid)
   fp->filter.filter[0] = 0x02;
   fp->filter.mask[0] = 0xff;
   tdt_add(tdmi, fp, dvb_pmt_callback, NULL, pmtname, 
-	  TDT_CRC | TDT_QUICKREQ, pmt_pid, NULL);
+	  TDT_CRC | TDT_QUICKREQ | TDT_TDT, pmt_pid, NULL);
+}
+
+void
+dvb_table_rem_pmt(th_dvb_mux_instance_t *tdmi, int pmt_pid)
+{
+  th_dvb_adapter_t *tda = tdmi->tdmi_adapter;
+  th_dvb_table_t *tdt = NULL;
+  LIST_FOREACH(tdt, &tdmi->tdmi_tables, tdt_link)
+    if (tdt->tdt_pid == pmt_pid && tdt->tdt_callback == dvb_pmt_callback)
+      break;
+  if (tdt) dvb_tdt_destroy(tda, tdmi, tdt);
 }
 
 

@@ -318,6 +318,13 @@ typedef struct service {
     ST_HDTV       = 0x11,   /* HDTV (MPEG2) */
     ST_AC_SDTV    = 0x16,   /* Advanced codec SDTV */
     ST_AC_HDTV    = 0x19,   /* Advanced codec HDTV */
+    ST_EX_HDTV    = 0x91,   /* Bell TV HDTV */
+    ST_EX_SDTV    = 0x96,   /* Bell TV SDTV */
+    ST_EP_HDTV    = 0xA0,   /* Bell TV tiered HDTV */
+    ST_ET_HDTV    = 0xA6,   /* Bell TV tiered HDTV */
+    ST_DN_SDTV    = 0xA8,   /* DN advanced SDTV */
+    ST_DN_HDTV    = 0xA4,   /* DN HDTV */
+    ST_SK_SDTV    = 0xd3    /* SKY TV SDTV */
   } s_servicetype;
 
 
@@ -557,6 +564,8 @@ const char *service_nicename(service_t *t);
 
 const char *service_component_nicename(elementary_stream_t *st);
 
+const char *service_adapter_nicename(service_t *t);
+
 const char *service_tss2text(int flags);
 
 static inline int service_tss_is_error(int flags)
@@ -570,10 +579,12 @@ int tss2errcode(int tss);
 
 uint16_t service_get_encryption(service_t *t);
 
-int service_get_signal_status(service_t *t, signal_status_t *status);
-
 void service_set_dvb_default_charset(service_t *t, const char *dvb_default_charset);
 
 void service_set_dvb_eit_enable(service_t *t, int dvb_eit_enable);
+
+int service_is_primary_epg (service_t *t);
+
+htsmsg_t *servicetype_list (void);
 
 #endif // SERVICE_H__
