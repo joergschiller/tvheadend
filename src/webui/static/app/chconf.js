@@ -286,6 +286,20 @@ tvheadend.chconf = function() {
 		singleSelect : false
 	});
 
+ 	var channelFilterName = new Ext.form.TextField({
+		emptyText : 'Search name...',
+		width : 200
+	});
+
+	channelFilterName.on('valid', function(c) {
+		var value = c.getValue();
+
+		if (value.length < 1)
+			value = null;
+
+		tvheadend.channels.filter('name', value, true);
+	});
+
 	var delBtn = new Ext.Toolbar.Button({
 		tooltip : 'Delete one or more selected channels',
 		iconCls : 'remove',
@@ -328,12 +342,18 @@ tvheadend.chconf = function() {
 			forceFit : true
 		},
 		selModel : selModel,
-		tbar : [ delBtn, '-', saveBtn, rejectBtn, '->', {
-			text : 'Help',
-			handler : function() {
-				new tvheadend.help('Channels', 'config_channels.html');
-			}
-		} ]
+		tbar : [
+			channelFilterName,
+			'-',
+			{ text : 'Reset', handler: function() { tvheadend.channels.clearFilter(); channelFilterName.reset(); } },
+			'-',
+			delBtn,
+			'-',
+			saveBtn,
+			rejectBtn,
+			'->',
+			{ text : 'Help', handler: function() { new tvheadend.help('Channels', 'config_channels.html'); } }
+		]
 	});
 
 	tvheadend.channels.on('update', function(s, r, o) {
