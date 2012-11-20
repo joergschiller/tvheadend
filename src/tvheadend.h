@@ -53,6 +53,7 @@ typedef struct source_info {
   char *si_mux;
   char *si_provider;
   char *si_service;
+  int   si_type;
 } source_info_t;
 
 static inline void
@@ -236,6 +237,13 @@ typedef enum {
   SMT_SERVICE_STATUS,
 
   /**
+   * Signal status
+   *
+   * Notification about frontend signal status
+   */
+  SMT_SIGNAL_STATUS,
+
+  /**
    * Streaming stop.
    *
    * End of streaming. If sm_code is 0 this was a result to an
@@ -325,9 +333,10 @@ typedef struct streaming_queue {
   
   streaming_target_t sq_st;
 
-  pthread_mutex_t sq_mutex;              /* Protects sp_queue */
-  pthread_cond_t  sq_cond;               /* Condvar for signalling new
-					    packets */
+  pthread_mutex_t sq_mutex;    /* Protects sp_queue */
+  pthread_cond_t  sq_cond;     /* Condvar for signalling new packets */
+
+  size_t          sq_maxsize;  /* Max queue size (bytes) */
   
   struct streaming_message_queue sq_queue;
 
@@ -422,6 +431,14 @@ extern void scopedunlock(pthread_mutex_t **mtxp);
 
 #define tvh_strlcatf(buf, size, fmt...) \
  snprintf((buf) + strlen(buf), (size) - strlen(buf), fmt)
+
+static inline const char *tvh_strbegins(const char *s1, const char *s2)
+{
+  while(*s2)
+    if(*s1++ != *s2++)
+      return NULL;
+  return s1;
+}
 
 int tvh_open(const char *pathname, int flags, mode_t mode);
 

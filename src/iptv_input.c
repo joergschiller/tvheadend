@@ -471,6 +471,7 @@ iptv_service_setsourceinfo(service_t *t, struct source_info *si)
   char straddr[INET6_ADDRSTRLEN];
   memset(si, 0, sizeof(struct source_info));
 
+  si->si_type = S_MPEG_TS;
   si->si_adapter = t->s_iptv_iface ? strdup(t->s_iptv_iface) : NULL;
   if(t->s_iptv_group.s_addr != 0) {
     si->si_mux = strdup(inet_ntoa(t->s_iptv_group));
@@ -568,11 +569,16 @@ iptv_service_load(void)
   const char *s;
   unsigned int u32;
   service_t *t;
+  int old = 0;
 
   lock_assert(&global_lock);
 
-  if((l = hts_settings_load("iptvservices")) == NULL)
-    return;
+  if((l = hts_settings_load("iptvservices")) == NULL) {
+    if ((l = hts_settings_load("iptvtransports")) == NULL)
+      return;
+    else
+      old = 1;
+  }
   
   HTSMSG_FOREACH(f, l) {
     if((c = htsmsg_get_map_by_field(f)) == NULL)
@@ -614,6 +620,10 @@ iptv_service_load(void)
     
     if(s && u32)
       service_map_channel(t, channel_find_by_name(s, 1, 0), 0);
+
+    /* Migrate to new */
+    if(old)
+      iptv_service_save(t);
   }
   htsmsg_destroy(l);
 }

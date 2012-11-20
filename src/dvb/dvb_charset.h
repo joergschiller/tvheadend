@@ -1,6 +1,6 @@
 /*
- *  tvheadend, HTSP interface
- *  Copyright (C) 2007 Andreas �man
+ *  tvheadend, dvb charset config
+ *  Copyright (C) 2012 Mariusz Białończyk
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -16,26 +16,22 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef HTSP_H_
-#define HTSP_H_
+#ifndef __TVH_DVB_CHARSET_H__
+#define __TVH_DVB_CHARSET_H__
 
-#include "epg.h"
-#include "dvr/dvr.h"
+typedef struct dvb_charset {
+  LIST_ENTRY(dvb_charset) link;
+ uint16_t onid;
+ uint16_t tsid;
+ uint16_t sid;
+ const char *charset;
+} dvb_charset_t;
 
-void htsp_init(void);
+LIST_HEAD(,dvb_charset) dvb_charset_list;
 
-void htsp_channel_update_current(channel_t *ch);
+void dvb_charset_init ( void );
 
-void htsp_channel_add(channel_t *ch);
-void htsp_channel_update(channel_t *ch);
-void htsp_channel_delete(channel_t *ch);
+const char *dvb_charset_find
+  (uint16_t onid, uint16_t tsid, uint16_t sid);
 
-void htsp_tag_add(channel_tag_t *ct);
-void htsp_tag_update(channel_tag_t *ct);
-void htsp_tag_delete(channel_tag_t *ct);
-
-void htsp_dvr_entry_add(dvr_entry_t *de);
-void htsp_dvr_entry_update(dvr_entry_t *de);
-void htsp_dvr_entry_delete(dvr_entry_t *de);
-
-#endif /* HTSP_H_ */
+#endif /* __TVH_DVB_CHARSET_H__ */

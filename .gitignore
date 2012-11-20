@@ -1,10 +1,18 @@
 build.*
 .config.mk
 
+src/version.c
+
 .cproject
 .project
 .settings
 data/dvb-scan
+
 *.pyc
 .*.sw[op]
-/.idea/
+
+debian/files
+debian/tvheadend
+debian/tvheadend-dbg
+debian/tvheadend*substvars
+debian/tvheadend*.debhelper*

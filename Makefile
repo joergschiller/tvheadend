@@ -32,7 +32,7 @@ CFLAGS  += -Wmissing-prototypes -fms-extensions
 CFLAGS  += -g -funsigned-char -O2 
 CFLAGS  += -D_FILE_OFFSET_BITS=64
 CFLAGS  += -I${BUILDDIR} -I${CURDIR}/src -I${CURDIR}
-LDFLAGS += -lrt -ldl -lpthread
+LDFLAGS += -lrt -ldl -lpthread -lm
 
 #
 # Other config
@@ -88,12 +88,14 @@ SRCS =  src/main.c \
 	src/parser_latm.c \
 	src/tsdemux.c \
 	src/bitstream.c \
-	src/htsp.c \
+	src/htsp_server.c \
 	src/serviceprobe.c \
 	src/htsmsg.c \
 	src/htsmsg_binary.c \
 	src/htsmsg_json.c \
 	src/htsmsg_xml.c \
+	src/misc/dbl.c \
+	src/misc/json.c \
 	src/settings.c \
 	src/htsbuf.c \
 	src/trap.c \
@@ -146,14 +148,17 @@ SRCS += src/muxer.c \
 SRCS-${CONFIG_LINUXDVB} += \
 	src/dvb/dvb.c \
 	src/dvb/dvb_support.c \
+	src/dvb/dvb_charset.c \
 	src/dvb/dvb_fe.c \
 	src/dvb/dvb_tables.c \
 	src/dvb/diseqc.c \
 	src/dvb/dvb_adapter.c \
 	src/dvb/dvb_multiplex.c \
-	src/dvb/dvb_transport.c \
+	src/dvb/dvb_service.c \
 	src/dvb/dvb_preconf.c \
 	src/dvb/dvb_satconf.c \
+	src/dvb/dvb_input_filtered.c \
+	src/dvb/dvb_input_raw.c \
 	src/webui/extjs_dvb.c \
 
 # V4L
@@ -232,9 +237,8 @@ distclean: clean
 	rm -f ${CURDIR}/.config.mk
 
 # Create buildversion.h
-src/version.c: $(BUILDDIR)/buildversion.h
-$(BUILDDIR)/buildversion.h: FORCE
-	@$(CURDIR)/support/version.sh $(CURDIR) $@
+src/version.c: FORCE
+	@$(CURDIR)/support/version $@ > /dev/null
 FORCE:
 
 # Include dependency files if they exist.

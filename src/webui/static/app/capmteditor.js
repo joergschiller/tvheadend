@@ -7,6 +7,12 @@ tvheadend.capmteditor = function() {
 		width : 60
 	});
 
+	var oscamColumn = new Ext.grid.CheckColumn({
+		header : "OSCam mode",
+		dataIndex : 'oscam',
+		width : 60
+	});
+
 	function setMetaAttr(meta, record) {
 		var enabled = record.get('enabled');
 		if (!enabled) return;
@@ -20,7 +26,9 @@ tvheadend.capmteditor = function() {
 		}
 	}
 
-	var cm = new Ext.grid.ColumnModel([ enabledColumn, {
+	var cm = new Ext.grid.ColumnModel({
+  defaultSortable: true,
+  columns: [ enabledColumn, {
 		header : "Camd.socket Filename",
 		dataIndex : 'camdfilename',
 		width : 200,
@@ -41,7 +49,7 @@ tvheadend.capmteditor = function() {
 		editor : new fm.TextField({
 			allowBlank : false
 		})
-	}, {
+	}, oscamColumn, {
 		header : "Comment",
 		dataIndex : 'comment',
 		width : 400,
@@ -50,10 +58,10 @@ tvheadend.capmteditor = function() {
 			return value;
 		},
 		editor : new fm.TextField()
-	} ]);
+	} ]});
 
 	var rec = Ext.data.Record.create([ 'enabled', 'connected', 'camdfilename',
-		'port', 'comment' ]);
+		'port', 'oscam', 'comment' ]);
 
 	store = new Ext.data.JsonStore({
 		root : 'entries',
@@ -75,5 +83,5 @@ tvheadend.capmteditor = function() {
 	});
 
 	return new tvheadend.tableEditor('Capmt Connections', 'capmt', cm, rec,
-		[ enabledColumn ], store, 'config_capmt.html', 'key');
+		[ enabledColumn, oscamColumn ], store, 'config_capmt.html', 'key');
 }
