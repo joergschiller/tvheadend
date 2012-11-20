@@ -1,6 +1,6 @@
 CHANGELOG=debian/changelog
 NOW=`date -R`
-VER=`git describe | sed "s/\([0-9]*\)\.\([0-9]*\)-\([0-9]*\)-.*/\1.\2.\3/"`
+VER=`git describe | sed "s/v\?\([0-9]*\)\.\([0-9]*\)-\([0-9]*\)-.*/\1.\2.\3/"`
 echo >${CHANGELOG} "tvheadend (${VER}) unstable; urgency=low"
 echo >>${CHANGELOG}
 echo >>${CHANGELOG} "  * The full changelog can be found at"
