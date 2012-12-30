@@ -74,10 +74,21 @@ static int
 page_root(http_connection_t *hc, const char *remain, void *opaque)
 {
   if(is_client_simple(hc)) {
-    http_redirect(hc, "/simple.html");
+    http_redirect(hc, "simple.html");
   } else {
-    http_redirect(hc, "/extjs.html");
+    http_redirect(hc, "extjs.html");
   }
+  return 0;
+}
+
+static int
+page_root2(http_connection_t *hc, const char *remain, void *opaque)
+{
+  if (!tvheadend_webroot) return 1;
+  char *tmp = malloc(strlen(tvheadend_webroot) + 2);
+  sprintf(tmp, "%s/", tvheadend_webroot);
+  http_redirect(hc, tmp);
+  free(tmp);
   return 0;
 }
 
@@ -128,7 +139,7 @@ page_static_file(http_connection_t *hc, const char *remain, void *opaque)
       ret = 500;
       break;
     }
-    if (write(hc->hc_fd, buf, c) != c) {
+    if (tvh_write(hc->hc_fd, buf, c)) {
       ret = 500;
       break;
     }
@@ -516,6 +527,8 @@ page_http_playlist(http_connection_t *hc, const char *remain, void *opaque)
     r = http_tag_list_playlist(hc);
   else if(!strcmp(components[0], "channels"))
     r = http_channel_list_playlist(hc);
+  else if(!strcmp(components[0], "channels.m3u"))
+    r = http_channel_list_playlist(hc);
   else if(!strcmp(components[0], "recordings"))
     r = http_dvr_list_playlist(hc);
   else {
@@ -597,6 +610,7 @@ http_stream_service(http_connection_t *hc, service_t *service)
 /**
  * Subscribes to a service and starts the streaming loop
  */
+#if ENABLE_LINUXDVB
 static int
 http_stream_tdmi(http_connection_t *hc, th_dvb_mux_instance_t *tdmi)
 {
@@ -616,6 +630,7 @@ http_stream_tdmi(http_connection_t *hc, th_dvb_mux_instance_t *tdmi)
 
   return 0;
 }
+#endif
 
 
 /**
@@ -698,7 +713,9 @@ http_stream(http_connection_t *hc, const char *remain, void *opaque)
   char *components[2];
   channel_t *ch = NULL;
   service_t *service = NULL;
+#if ENABLE_LINUXDVB
   th_dvb_mux_instance_t *tdmi = NULL;
+#endif
 
   hc->hc_keep_alive = 0;
 
@@ -722,16 +739,20 @@ http_stream(http_connection_t *hc, const char *remain, void *opaque)
     ch = channel_find_by_name(components[1], 0, 0);
   } else if(!strcmp(components[0], "service")) {
     service = service_find_by_identifier(components[1]);
+#if ENABLE_LINUXDVB
   } else if(!strcmp(components[0], "mux")) {
     tdmi = dvb_mux_find_by_identifier(components[1]);
+#endif
   }
 
   if(ch != NULL) {
     return http_stream_channel(hc, ch);
   } else if(service != NULL) {
     return http_stream_service(hc, service);
+#if ENABLE_LINUXDVB
   } else if(tdmi != NULL) {
     return http_stream_tdmi(hc, tdmi);
+#endif
   } else {
     http_error(hc, HTTP_STATUS_BAD_REQUEST);
     return HTTP_STATUS_BAD_REQUEST;
@@ -914,6 +935,7 @@ int page_statedump(http_connection_t *hc, const char *remain, void *opaque);
 void
 webui_init(void)
 {
+  http_path_add("", NULL, page_root2, ACCESS_WEB_INTERFACE);
   http_path_add("/", NULL, page_root, ACCESS_WEB_INTERFACE);
 
   http_path_add("/dvrfile", NULL, page_dvrfile, ACCESS_WEB_INTERFACE);
