@@ -45,6 +45,7 @@
 #include "dvb/dvb.h"
 #include "dvb/dvb_support.h"
 #include "imagecache.h"
+#include "tcp.h"
 
 /**
  *
@@ -155,7 +156,7 @@ page_static_file(http_connection_t *hc, const char *remain, void *opaque)
  */
 static void
 http_stream_run(http_connection_t *hc, streaming_queue_t *sq,
-    const char *name, muxer_container_type_t mc)
+		const char *name, muxer_container_type_t mc)
 {
   streaming_message_t *sm;
   int run = 1;
@@ -244,7 +245,10 @@ http_stream_run(http_connection_t *hc, streaming_queue_t *sq,
       }
       break;
 
+    case SMT_SKIP:
+    case SMT_SPEED:
     case SMT_SIGNAL_STATUS:
+    case SMT_TIMESHIFT_STATUS:
       break;
 
     case SMT_NOSTART:
@@ -561,6 +565,7 @@ http_stream_service(http_connection_t *hc, service_t *service)
   const char *str;
   size_t qsize;
   const char *name;
+  char addrbuf[50];
 
   mc = muxer_container_txt2type(http_arg_get(&hc->hc_req_args, "mux"));
   if(mc == MC_UNKNOWN) {
@@ -573,7 +578,7 @@ http_stream_service(http_connection_t *hc, service_t *service)
   else
     qsize = 1500000;
 
-  if(mc == MC_PASS) {
+  if(mc == MC_PASS || mc == MC_RAW) {
     streaming_queue_init2(&sq, SMT_PACKET, qsize);
     gh = NULL;
     tsfix = NULL;
@@ -587,7 +592,11 @@ http_stream_service(http_connection_t *hc, service_t *service)
     flags = 0;
   }
 
-  s = subscription_create_from_service(service, "HTTP", st, flags);
+  tcp_get_ip_str((struct sockaddr*)hc->hc_peer, addrbuf, 50);
+  s = subscription_create_from_service(service, "HTTP", st, flags,
+				       addrbuf,
+				       hc->hc_username,
+				       http_arg_get(&hc->hc_args, "User-Agent"));
   if(s) {
     name = strdupa(service->s_ch ?
                    service->s_ch->ch_name : service->s_nicename);
@@ -619,12 +628,17 @@ http_stream_tdmi(http_connection_t *hc, th_dvb_mux_instance_t *tdmi)
   th_subscription_t *s;
   streaming_queue_t sq;
   const char *name;
+  char addrbuf[50];
   streaming_queue_init(&sq, SMT_PACKET);
 
-  s = dvb_subscription_create_from_tdmi(tdmi, "HTTP", &sq.sq_st);
+  tcp_get_ip_str((struct sockaddr*)hc->hc_peer, addrbuf, 50);
+  s = dvb_subscription_create_from_tdmi(tdmi, "HTTP", &sq.sq_st,
+					addrbuf,
+					hc->hc_username,
+					http_arg_get(&hc->hc_args, "User-Agent"));
   name = strdupa(tdmi->tdmi_identifier);
   pthread_mutex_unlock(&global_lock);
-  http_stream_run(hc, &sq, name, MC_PASS);
+  http_stream_run(hc, &sq, name, MC_RAW);
   pthread_mutex_lock(&global_lock);
   subscription_unsubscribe(s);
 
@@ -653,6 +667,7 @@ http_stream_channel(http_connection_t *hc, channel_t *ch)
   char *str;
   size_t qsize;
   const char *name;
+  char addrbuf[50];
 
   mc = muxer_container_txt2type(http_arg_get(&hc->hc_req_args, "mux"));
   if(mc == MC_UNKNOWN) {
@@ -665,7 +680,7 @@ http_stream_channel(http_connection_t *hc, channel_t *ch)
   else
     qsize = 1500000;
 
-  if(mc == MC_PASS) {
+  if(mc == MC_PASS || mc == MC_RAW) {
     streaming_queue_init2(&sq, SMT_PACKET, qsize);
     gh = NULL;
     tsfix = NULL;
@@ -679,8 +694,9 @@ http_stream_channel(http_connection_t *hc, channel_t *ch)
     flags = 0;
   }
 
+  tcp_get_ip_str((struct sockaddr*)hc->hc_peer, addrbuf, 50);
   s = subscription_create_from_channel(ch, priority, "HTTP", st, flags,
-               inet_ntoa(hc->hc_peer->sin_addr),
+               addrbuf,
                hc->hc_username,
                http_arg_get(&hc->hc_args, "User-Agent"));
 
@@ -939,6 +955,9 @@ int page_statedump(http_connection_t *hc, const char *remain, void *opaque);
 void
 webui_init(void)
 {
+  if (tvheadend_webui_debug)
+    tvhlog(LOG_INFO, "webui", "Running web interface in debug mode");
+
   http_path_add("", NULL, page_root2, ACCESS_WEB_INTERFACE);
   http_path_add("/", NULL, page_root, ACCESS_WEB_INTERFACE);
 
@@ -950,7 +969,7 @@ webui_init(void)
 
   http_path_add("/stream",  NULL, http_stream,  ACCESS_STREAMING);
 
-  http_path_add("/imagecache", NULL, page_imagecache, ACCESS_ANONYMOUS);
+  http_path_add("/imagecache", NULL, page_imagecache, ACCESS_WEB_INTERFACE);
 
   webui_static_content("/static",        "src/webui/static");
   webui_static_content("/docs",          "docs/html");

@@ -463,7 +463,6 @@ service_destroy(service_t *t)
 {
   elementary_stream_t *st;
   th_subscription_t *s;
-  channel_t *ch = t->s_ch;
 
   if(t->s_dtor != NULL)
     t->s_dtor(t);
@@ -506,11 +505,6 @@ service_destroy(service_t *t)
   avgstat_flush(&t->s_rate);
 
   service_unref(t);
-
-  if(ch != NULL) {
-    if(LIST_FIRST(&ch->ch_services) == NULL) 
-      channel_delete(ch);
-  }
 }
 
 
@@ -1186,6 +1180,9 @@ service_is_primary_epg(service_t *svc)
   if (!svc || !svc->s_ch) return 0;
   LIST_FOREACH(t, &svc->s_ch->ch_services, s_ch_link) {
     if (!t->s_dvb_mux_instance) continue;
+    if (!t->s_dvb_mux_instance->tdmi_enabled) continue;
+    if (!t->s_dvb_mux_instance->tdmi_adapter->tda_enabled) continue;
+    if (!t->s_dvb_mux_instance->tdmi_adapter->tda_rootpath) continue;
     if (!t->s_enabled || !t->s_dvb_eit_enable) continue;
     if (!ret || service_get_prio(t) < service_get_prio(ret))
       ret = t;
